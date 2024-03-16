@@ -153,7 +153,6 @@ public:
         //listExtensions();
         initWindow();
         
-        //initVulkan();
         createInstance();
         setupDebugMessenger();
 
@@ -171,16 +170,7 @@ public:
         createComputePipeline();
         createCommandPool();
 
-        //createDepthResources();
-
         createFramebuffers();
-
-        //createTextureImage();
-        //createTextureImageView();
-        //createTextureSampler();
-
-        //createVertexBuffer();
-        //createIndexBuffer();
 
         createSSBO();
         createUniformBuffers();
