@@ -5,259 +5,8 @@
 
 #include <iostream>
 #include <chrono>
+#include <random>
 
-/**
- *  Locates an appropriate format for use in the depth buffer.
- */
-VkFormat VulkanApplication::findDepthFormat() {
-    return findSupportedFormat(
-        /*candidates*/{ VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
-        /*tiling*/VK_IMAGE_TILING_OPTIMAL,
-        /*features*/VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-    );
-}
-
-/**
- *  Checks for supported features among a list of formats.
- */
-VkFormat VulkanApplication::findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) {
-    for (VkFormat format : candidates) {
-        // Get properties
-        VkFormatProperties props;
-        vkGetPhysicalDeviceFormatProperties(physicalDevice, format, &props);
-
-        // Check if properties for linearTiling/optimalTiling are correct
-        if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
-            return format;
-
-        if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features)
-            return format;
-    }
-
-    // None of the candidate formats fulfilled the requirements
-    throw std::runtime_error("ERR::VULKAN::FIND_SUPPORTED_FORMAT::NO_SUPPORTED_FORMAT");
-}
-
-/**
- *  Creates the image for the depth buffer.
- */
-void VulkanApplication::createDepthResources() {
-    // Select format
-    VkFormat depthFormat = findDepthFormat();
-
-    // Create image and view
-    createImage(
-        swapChainExtent.width,
-        swapChainExtent.height,
-        1,
-        depthFormat,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        depthImage,
-        depthImageMemory
-    );
-
-    depthImageView = createImageView(depthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-
-    // Transition image format (this does not need to be done, but is done to be more explicit)
-    transitionImageLayout(depthImage, depthFormat, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, 1);
-}
-
-/**
- *  Reads, allocates, and creates an example texture.
- */
-void VulkanApplication::createTextureImage() {
-    // Load image from file
-    int texWidth, texHeight, texChannels;
-    stbi_uc* pixels = stbi_load("../resources/textures/texture.jpg", &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-    VkDeviceSize imageSize = texWidth * texHeight * 4;
-    if (!pixels)
-        throw std::runtime_error("ERR::VULKAN::CREATE_TEXTURE_IMAGE::STBI_LOAD_FAILURE");
-
-    mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-
-    // Create staging buffer and transfer data
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-
-    createBuffer(
-        imageSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        stagingBuffer,
-        stagingBufferMemory
-    );
-
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
-    memcpy(data, pixels, static_cast<size_t>(imageSize));
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    stbi_image_free(pixels);
-
-    // Create and allocate image
-    createImage(
-        texWidth,
-        texHeight,
-        mipLevels,
-        VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        textureImage,
-        textureImageMemory
-    );
-
-    // Transition the receiving image's format to a copy-optimised one and copy the stagingbuffer to it
-    // Note: The VK_IMAGE_LAYOUT_GENERAL format supports all operations and can be good for testing, but is not optimal.
-    transitionImageLayout(
-        textureImage,
-        VK_FORMAT_R8G8B8A8_SRGB,
-        VK_IMAGE_LAYOUT_UNDEFINED,
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        mipLevels
-    );
-
-    copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-
-    // Lastly, transition the receiving image's format to a sample-optimised one
-    // FOR NOW; UNUSED DUE TO MIPMAPPING.
-    //transitionImageLayout(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
-    generateMipmaps(textureImage, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
-
-    // Cleanup
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
-
-/**
- *  Creates the view for the texture.
- */
-void VulkanApplication::createTextureImageView() {
-    textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
-}
-
-/**
- *  Creates the sampler for the texture.
- */
-void VulkanApplication::createTextureSampler() {
-    // Create sampler
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.minLod = 0.0f; // To see effects: try static_cast<float>(mipLevels / 2);
-    samplerInfo.maxLod = static_cast<float>(mipLevels);
-    samplerInfo.mipLodBias = 0.0f; // Optional
-
-    //set up anisotropic filtering
-    VkPhysicalDeviceProperties properties{};
-    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK; // Color of outside of texture dimensions
-    samplerInfo.unnormalizedCoordinates = VK_FALSE; // True -> [0,width) and [0,height) instead of [0,1)
-
-    if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
-        throw std::runtime_error("failed to create texture sampler!");
-}
-
-/**
- *  Creates the VBO.
- */
-void VulkanApplication::createVertexBuffer() {
-    // Create staging buffer
-    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(
-        /*size*/bufferSize,
-        /*usage*/VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        // VK_BUFFER_USAGE_TRANSFER_SRC_BIT - can be used as source for memory transfer.
-        /*properties*/VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        /*buffer*/stagingBuffer,
-        /*bufferMemory*/stagingBufferMemory
-    );
-
-    // Transfer vertices data to staging buffer
-    /*
-        Since VK_MEMORY_PROPERTY_HOST_COHERENT_BIT is used, there is no need to worry about async problems.
-        Otherwise, vkFlushMappedMemoryRanges / vkInvalidateMappedMemoryRanges must be called after writing / before reading memory.
-        Latter may lead to better performance.
-
-        Even then, the data might not be visible for the GPU immidiately.
-        However, it's guaranteed to be so by the next call to vkQueueSubmit.
-    */
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, vertices.data(), (size_t)bufferSize); // transfer vertices data to mapped memory
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    // Create VBO which is optimized for GPU and transfer memory from staging buffer
-    createBuffer(
-        /*size*/bufferSize,
-        // VK_BUFFER_USAGE_TRANSFER_DST_BIT - can be used as destination for memory transfer.
-        /*usage*/VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        /*properties*/VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        /*buffer*/vertexBuffer,
-        /*bufferMemory*/vertexBufferMemory
-    );
-
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-
-    // Cleanup
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
-
-/**
- *  Creates the EBO/IBO.
- */
-void VulkanApplication::createIndexBuffer() {
-    // Create staging buffer
-    VkDeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(
-        /*size*/bufferSize,
-        /*usage*/VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        // VK_BUFFER_USAGE_TRANSFER_SRC_BIT - can be used as source for memory transfer.
-        /*properties*/VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        /*buffer*/stagingBuffer,
-        /*bufferMemory*/stagingBufferMemory
-    );
-
-    // Transfer indices data to staging buffer
-    void* data;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-    memcpy(data, indices.data(), (size_t)bufferSize); // transfer vertices data to mapped memory
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    // Create EBO/IBO which is optimized for GPU and transfer memory from staging buffer
-    createBuffer(
-        /*size*/bufferSize,
-        // VK_BUFFER_USAGE_TRANSFER_DST_BIT - can be used as destination for memory transfer.
-        /*usage*/VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-        /*properties*/VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        /*buffer*/indexBuffer,
-        /*bufferMemory*/indexBufferMemory
-    );
-
-    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
-
-    // Cleanup
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
-}
 
 /**
  *  Creates uniform buffer objects for each inflight frame.
@@ -294,8 +43,8 @@ void VulkanApplication::createDescriptorPool() {
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) * 2;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -329,7 +78,7 @@ void VulkanApplication::createDescriptorSets() {
     // (Also, if createDescriptorPool is wrong, this might not give any warnings)
     descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
     if (vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()) != VK_SUCCESS)
-        throw std::runtime_error("failed to allocate descriptor sets!");
+        throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SETS::DESCRIPTOR_SETS_ALLOCATION_FAILED");
 
     // Configure UBOs
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -339,14 +88,8 @@ void VulkanApplication::createDescriptorSets() {
         bufferInfo.offset = 0;
         bufferInfo.range = sizeof(UniformBufferObject);
 
-        // Bind image and sampler to descriptors in descriptor set
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = textureImageView;
-        imageInfo.sampler = textureSampler;
-
         // Configure descriptor writes
-        std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = descriptorSets[i];
         descriptorWrites[0].dstBinding = 0;
@@ -356,13 +99,31 @@ void VulkanApplication::createDescriptorSets() {
         descriptorWrites[0].pBufferInfo = &bufferInfo;
         descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
+        VkDescriptorBufferInfo storageBufferInfoLastFrame{};
+        storageBufferInfoLastFrame.buffer = shaderStorageBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
+        storageBufferInfoLastFrame.offset = 0;
+        storageBufferInfoLastFrame.range = sizeof(Particle) * PARTICLE_COUNT;
+
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = descriptorSets[i];
         descriptorWrites[1].dstBinding = 1;
         descriptorWrites[1].dstArrayElement = 0; // i = 0
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
         descriptorWrites[1].descriptorCount = 1; // i = array.count()
-        descriptorWrites[1].pImageInfo = &imageInfo;
+        descriptorWrites[1].pBufferInfo = &storageBufferInfoLastFrame;
+
+        VkDescriptorBufferInfo storageBufferInfoCurrentFrame{};
+        storageBufferInfoCurrentFrame.buffer = shaderStorageBuffers[i];
+        storageBufferInfoCurrentFrame.offset = 0;
+        storageBufferInfoCurrentFrame.range = sizeof(Particle) * PARTICLE_COUNT;
+
+        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[2].dstSet = descriptorSets[i];
+        descriptorWrites[2].dstBinding = 2;
+        descriptorWrites[2].dstArrayElement = 0; // i = 0
+        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        descriptorWrites[2].descriptorCount = 1; // i = array.count()
+        descriptorWrites[2].pBufferInfo = &storageBufferInfoCurrentFrame;
 
         vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
     }
@@ -378,19 +139,56 @@ void VulkanApplication::createDescriptorSets() {
  *  Updates the contents of the UBO for the given in-flight frame.
  */
 void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
-    // Measure time
-    static auto startTime = std::chrono::high_resolution_clock::now();
-    auto currentTime = std::chrono::high_resolution_clock::now();
-    float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
-
     // Set up contents of UBO
     UniformBufferObject ubo{};
-    ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-    ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float)swapChainExtent.height, 0.1f, 10.0f);
-    ubo.proj[1][1] *= -1; // Since GLM uses inverse Y clip coordinates, this must be done to flip it back
+    ubo.deltaTime = lastFrameTime * 2.f;
 
     // Copy contents into buffer
     // (This is less efficient than using "push constants"
     memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+}
+
+/**
+ *  Creates the SSBO.
+ */
+void VulkanApplication::createSSBO() {
+    // Initialize particles
+    std::default_random_engine rndEngine((unsigned)time(nullptr));
+    std::uniform_real_distribution<float> rndDist(0.0f, 1.0f);
+
+    // Initial particle positions on a circle
+    std::vector<Particle> particles(PARTICLE_COUNT);
+    for (auto& particle : particles) {
+        float r = 0.25f * sqrt(rndDist(rndEngine));
+        float theta = rndDist(rndEngine) * 2.0f * 3.14159265358979323846f;
+        float x = r * cos(theta) * HEIGHT / WIDTH;
+        float y = r * sin(theta);
+        particle.position = glm::vec2(x, y);
+        particle.velocity = glm::vec2(0.00005f, 0); //glm::normalize(glm::vec2(x, y)) * 0.00025f;
+        particle.color = glm::vec4(rndDist(rndEngine), rndDist(rndEngine), rndDist(rndEngine), 1.0f);
+    }
+
+    VkDeviceSize bufferSize = sizeof(Particle) * PARTICLE_COUNT;
+
+    // Create a staging buffer used to upload data to the gpu
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+    void* data;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+    memcpy(data, particles.data(), (size_t)bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    shaderStorageBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    shaderStorageBuffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+
+    // Copy initial particle data to all storage buffers
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(bufferSize, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shaderStorageBuffers[i], shaderStorageBuffersMemory[i]);
+        copyBuffer(stagingBuffer, shaderStorageBuffers[i], bufferSize);
+    }
+
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
 }

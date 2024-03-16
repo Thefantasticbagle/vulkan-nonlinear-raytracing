@@ -63,9 +63,9 @@ void VulkanApplication::createSwapChain() {
 
     // Set vulkan sharing mode based on graphics- and presentation family
     QueueFamilyIndices indices = findQueueFamilies(physicalDevice);
-    uint32_t queueFamilyIndices[] = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+    uint32_t queueFamilyIndices[] = { indices.graphicsAndComputeFamily.value(), indices.presentFamily.value() };
 
-    if (indices.graphicsFamily != indices.presentFamily) {
+    if (indices.graphicsAndComputeFamily != indices.presentFamily) {
         createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT; // Requires 2+ distinct queue families
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
@@ -124,7 +124,6 @@ void VulkanApplication::recreateSwapChain() {
     cleanupSwapChain();
     createSwapChain();
     createImageViews();
-    createDepthResources();
     createFramebuffers();
 }
 
@@ -132,10 +131,6 @@ void VulkanApplication::recreateSwapChain() {
  *  Cleans up the swapchain, imageviews, and framebuffers.
  */
 void VulkanApplication::cleanupSwapChain() {
-    vkDestroyImageView(device, depthImageView, nullptr);
-    vkDestroyImage(device, depthImage, nullptr);
-    vkFreeMemory(device, depthImageMemory, nullptr);
-
     for (auto framebuffer : swapChainFramebuffers) vkDestroyFramebuffer(device, framebuffer, nullptr);
     for (auto imageView : swapChainImageViews) vkDestroyImageView(device, imageView, nullptr);
     vkDestroySwapchainKHR(device, swapChain, nullptr);
@@ -218,9 +213,8 @@ void VulkanApplication::createFramebuffers() {
     // Iterate image views, creating a framebuffer for each
     swapChainFramebuffers.resize(swapChainImageViews.size());
     for (size_t i = 0; i < swapChainImageViews.size(); i++) {
-        std::array<VkImageView, 2> attachments = {
-            swapChainImageViews[i],
-            depthImageView // Since only a single subpass is running at any time duing to our semaphores, we just need one depth image
+        std::array<VkImageView, 1> attachments = {
+            swapChainImageViews[i]
         };
 
         VkFramebufferCreateInfo framebufferInfo{};

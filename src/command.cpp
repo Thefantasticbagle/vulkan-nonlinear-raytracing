@@ -12,7 +12,7 @@ void VulkanApplication::createCommandPool() {
     // VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT - Allow command buffers to be re recorded individually, otherwise they must be reset together.
     // Since we want to record a command buffer each frame and reset a specific one, use the latter.
     poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsFamily.value();
+    poolInfo.queueFamilyIndex = queueFamilyIndices.graphicsAndComputeFamily.value();
 
     if (vkCreateCommandPool(device, &poolInfo, nullptr, &commandPool) != VK_SUCCESS)
         throw std::runtime_error("failed to create command pool!");
@@ -80,5 +80,24 @@ void VulkanApplication::createCommandBuffers() {
     allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
 
     if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
-        throw std::runtime_error("failed to allocate command buffers!");
+        throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+}
+
+/**
+ *  Allocate a commandbuffer for compute.
+ */
+void VulkanApplication::createComputeCommandBuffers() {
+    compCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+    // Create command buffer allocator
+    VkCommandBufferAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    allocInfo.commandPool = commandPool;
+    // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
+    // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
+    allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    allocInfo.commandBufferCount = (uint32_t)compCommandBuffers.size();
+
+    if (vkAllocateCommandBuffers(device, &allocInfo, compCommandBuffers.data()) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
 }

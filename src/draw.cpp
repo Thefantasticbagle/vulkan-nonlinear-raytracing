@@ -1,6 +1,31 @@
 #include "vulkanApplication.h"
 
 void VulkanApplication::drawFrame() {
+    VkSubmitInfo submitInfo{};
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+
+    // --- Compute
+    // Wait for previous compute iteration
+    vkWaitForFences(device, 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+    // Update UBO contents
+    updateUniformBuffer(currentFrame);
+
+    // Reset fences before commiting new commands
+    vkResetFences(device, 1, &computeInFlightFences[currentFrame]);
+
+    vkResetCommandBuffer(compCommandBuffers[currentFrame], 0);
+    recordComputeCommandBuffer(compCommandBuffers[currentFrame]);
+
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &compCommandBuffers[currentFrame];
+    submitInfo.signalSemaphoreCount = 1;
+    submitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
+
+    if (vkQueueSubmit(computeQueue, 1, &submitInfo, computeInFlightFences[currentFrame]) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::DRAW_FRAME::SUBMIT_COMPUTE_QUEUE_FAILED");
+    
+    // --- Graphics
     /*  // MODEL
         - Wait for the previous frame to finish
         - Acquire an image from the swap chain
@@ -33,17 +58,14 @@ void VulkanApplication::drawFrame() {
     //rerecord
     recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
 
-    // Update UBO contents
-    updateUniformBuffer(currentFrame);
-
     // Submit command buffer
-    VkSubmitInfo submitInfo{};
+    submitInfo = {};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
-    VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
+    VkSemaphore waitSemaphores[] = { computeFinishedSemaphores[currentFrame], imageAvailableSemaphores[currentFrame] };
     //for now, there is risk of vertex shader running before img available
-    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-    submitInfo.waitSemaphoreCount = 1;
+    VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_VERTEX_INPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+    submitInfo.waitSemaphoreCount = 2;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;

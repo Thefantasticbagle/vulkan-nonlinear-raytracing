@@ -18,6 +18,7 @@
 const uint32_t  WIDTH = 800;
 const uint32_t  HEIGHT = 600;
 const int       MAX_FRAMES_IN_FLIGHT = 2;
+const uint32_t PARTICLE_COUNT = 8192;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -85,11 +86,11 @@ static std::vector<char> readFile(const std::string& filename) {
  *  Struct for holdind queue families.
  */
 struct QueueFamilyIndices {
-    std::optional<uint32_t> graphicsFamily;
+    std::optional<uint32_t> graphicsAndComputeFamily;
     std::optional<uint32_t> presentFamily;
 
     bool isComplete() {
-        return graphicsFamily.has_value() && presentFamily.has_value();
+        return graphicsAndComputeFamily.has_value() && presentFamily.has_value();
     }
 };
 
@@ -102,91 +103,45 @@ struct SwapChainSupportDetails {
     std::vector<VkPresentModeKHR> presentModes; //available presentation modes
 };
 
+/**
+ *  Struct for storing UBO data.
+ */
+struct UniformBufferObject {
+    float deltaTime = 1.0f;
+};
 
 /**
- *  Vertex shader input.
+ *  TODO: Replace
  */
-struct Vertex {
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
+struct Particle {
+    glm::vec2 position;
+    glm::vec2 velocity;
+    glm::vec4 color;
 
-    /**
-     *  Creates a binding descriptor for the object.
-     */
     static VkVertexInputBindingDescription getBindingDescription() {
         VkVertexInputBindingDescription bindingDescription{};
-
         bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Vertex);
-        // VK_VERTEX_INPUT_RATE_VERTEX - Move to next data entry after each vertex.
-        // VK_VERTEX_INPUT_RATE_INSTANCE - Move to next data entry after each instance.
+        bindingDescription.stride = sizeof(Particle);
         bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
         return bindingDescription;
     }
 
-    /**
-     *  Creates attribute descriptors for the object.
-     */
-    static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions{};
+    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
+        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
 
         attributeDescriptions[0].binding = 0;
         attributeDescriptions[0].location = 0;
-        // float    -> VK_FORMAT_R32_SFLOAT
-        // vec2     -> VK_FORMAT_R32G32_SFLOAT
-        // vec3     -> VK_FORMAT_R32G32B32_SFLOAT
-        // vec4     -> VK_FORMAT_R32G32B32A32_SFLOAT
-        // ivec2    -> VK_FORMAT_R32G32_SINT
-        // uvec4    -> VK_FORMAT_R32G32B32A32_UINT
-        // double   -> VK_FORMAT_R64_SFLOAT
-        // ...
-        attributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Vertex, pos);
+        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+        attributeDescriptions[0].offset = offsetof(Particle, position);
 
         attributeDescriptions[1].binding = 0;
         attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Vertex, color);
-
-        attributeDescriptions[2].binding = 0;
-        attributeDescriptions[2].location = 2;
-        attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+        attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+        attributeDescriptions[1].offset = offsetof(Particle, color);
 
         return attributeDescriptions;
     }
-};
-
-const std::vector<Vertex> vertices = {
-    {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-
-    {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-    {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-    {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-    {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-};
-
-/**
- *  uint16_t => 65535 unique vertices. Use uint32_t aka VK_INDEX_TYPE_UINT32 for more.
- */
-static VkIndexType indicesType = VK_INDEX_TYPE_UINT16;
-const std::vector<uint16_t> indices = {
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4
-};
-
-/**
- *  Struct for storing UBO data.
- */
-struct UniformBufferObject {
-    alignas(16) glm::mat4 model;
-    alignas(16) glm::mat4 view;
-    alignas(16) glm::mat4 proj;
 };
 
 /**
@@ -213,30 +168,38 @@ public:
         createRenderPass();
         createDescriptorSetLayout();
         createGraphicsPipeline();
+        createComputePipeline();
         createCommandPool();
 
-        createDepthResources();
+        //createDepthResources();
 
         createFramebuffers();
 
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
+        //createTextureImage();
+        //createTextureImageView();
+        //createTextureSampler();
 
-        createVertexBuffer();
-        createIndexBuffer();
+        //createVertexBuffer();
+        //createIndexBuffer();
 
+        createSSBO();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
 
         createCommandBuffers();
+        createComputeCommandBuffers();
 
         createSyncObjects();
 
         while (!glfwWindowShouldClose(window)) {
             glfwPollEvents();
             drawFrame();
+
+            // Time
+            double currentTime = glfwGetTime();
+            lastFrameTime = (currentTime - lastTime) * 1000.0;
+            lastTime = currentTime;
         }
 
         vkDeviceWaitIdle(device);
@@ -261,6 +224,7 @@ private:
 
     // Queues
     VkQueue graphicsQueue;
+    VkQueue computeQueue;
     VkQueue presentQueue;
 
     // Swapchain
@@ -277,31 +241,22 @@ private:
     VkPipeline graphicsPipeline;
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
+    std::vector<VkCommandBuffer> compCommandBuffers;
 
-    // Depth buffer
-    VkImage depthImage;
-    VkDeviceMemory depthImageMemory;
-    VkImageView depthImageView;
+    // Compute
+    VkPipelineLayout computePipelineLayout;
+    VkPipeline computePipeline;
 
-    // Texture buffer
-    uint32_t mipLevels;
-    VkImage textureImage;
-    VkDeviceMemory textureImageMemory;
-    VkImageView textureImageView;
-    VkSampler textureSampler;
-
-    // Vertex buffer
-    VkBuffer vertexBuffer;
-    VkDeviceMemory vertexBufferMemory;
-
-    // Index buffer
-    VkBuffer indexBuffer;
-    VkDeviceMemory indexBufferMemory;
+    // SSBO
+    std::vector<VkBuffer> shaderStorageBuffers;
+    std::vector<VkDeviceMemory> shaderStorageBuffersMemory;
 
     // Uniform buffer
     std::vector<VkBuffer> uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
+
+    // Descriptor sets
     VkDescriptorSetLayout descriptorSetLayout;
     std::vector<VkDescriptorSet> descriptorSets;
     VkDescriptorPool descriptorPool;
@@ -309,10 +264,14 @@ private:
     // Synchronization
     std::vector<VkSemaphore> imageAvailableSemaphores;
     std::vector<VkSemaphore> renderFinishedSemaphores;
+    std::vector<VkSemaphore> computeFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
+    std::vector<VkFence> computeInFlightFences;
 
     // Drawing
     uint32_t currentFrame = 0;
+    float lastFrameTime = 0.0f;
+    double lastTime = 0.0f;
 
     // Functions
     void initWindow();
@@ -339,8 +298,8 @@ private:
 
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     void createSwapChain();
-    void VulkanApplication::recreateSwapChain();
-    void VulkanApplication::cleanupSwapChain();
+    void recreateSwapChain();
+    void cleanupSwapChain();
     VkSurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
@@ -350,20 +309,12 @@ private:
     void createRenderPass();
     void createDescriptorSetLayout();
     void createGraphicsPipeline();
+    void createComputePipeline();
     VkShaderModule createShaderModule(const std::vector<char>& code);
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+    void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
 
-    void createDepthResources();
-    VkFormat findDepthFormat();
-    VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
-
-    void createTextureImage();
-    void createTextureImageView();
-    void createTextureSampler();
-
-    void createVertexBuffer();
-    void createIndexBuffer();
-
+    void createSSBO();
     void createUniformBuffers();
     void createDescriptorPool();
     void createDescriptorSets();
@@ -376,31 +327,6 @@ private:
     void cleanup();
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-    void createImage(
-        uint32_t width,
-        uint32_t height,
-        uint32_t mipLevels,
-        VkFormat format,
-        VkImageTiling tiling,
-        VkImageUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkImage& image,
-        VkDeviceMemory& imageMemory
-    );
-    void transitionImageLayout(
-        VkImage image,
-        VkFormat format,
-        VkImageLayout oldLayout,
-        VkImageLayout newLayout,
-        uint32_t mipLevels);
-    bool hasStencilComponent(VkFormat format);
-    void copyBufferToImage(
-        VkBuffer buffer,
-        VkImage image,
-        uint32_t width,
-        uint32_t height
-    );
-    void generateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels);
 
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createBuffer(
@@ -415,4 +341,5 @@ private:
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
     void createCommandBuffers();
+    void createComputeCommandBuffers();
 };

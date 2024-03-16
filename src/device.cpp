@@ -77,10 +77,9 @@ QueueFamilyIndices VulkanApplication::findQueueFamilies(VkPhysicalDevice device)
         if (presentSupport)
             indices.presentFamily = i;
 
-        //check if family supports VK_QUEUE_GRAPHICS_BIT
-        //strictly speaking this does not NEED to be the same as presentFamily, but it improves performance
-        if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            indices.graphicsFamily = i;
+        //check if family supports VK_QUEUE_GRAPHICS_BIT and COMPUTE_BIT
+        if ((queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT))
+            indices.graphicsAndComputeFamily = i;
 
         // (Early exit)
         if (indices.isComplete()) break;
@@ -118,7 +117,7 @@ void VulkanApplication::createLogicalDevice() {
 
     // Create queue info struct
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
+    std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsAndComputeFamily.value(), indices.presentFamily.value() };
 
     float queuePriority = 1.0f;
     for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -160,6 +159,7 @@ void VulkanApplication::createLogicalDevice() {
 
     // Create handle to device queue
     // (These will most likely have the same values, unless one device is not able to i.e. render)
-    vkGetDeviceQueue(device, indices.graphicsFamily.value(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.graphicsAndComputeFamily.value(), 0, &graphicsQueue);
+    vkGetDeviceQueue(device, indices.graphicsAndComputeFamily.value(), 0, &computeQueue);
     vkGetDeviceQueue(device, indices.presentFamily.value(), 0, &presentQueue);
 }
