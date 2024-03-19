@@ -17,7 +17,7 @@ void VulkanApplication::createRenderPass() {
     // (For now, store ops here to render triangle on screen)
     colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR; // VK_ATTACHMENT_LOAD_OP_LOAD / VK_ATTACHMENT_LOAD_OP_CLEAR / VK_ATTACHMENT_LOAD_OP_DONT_CARE
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE; // VK_ATTACHMENT_STORE_OP_STORE / VK_ATTACHMENT_STORE_OP_DONT_CARE
-        
+
     // What to do with stencil data
     // (For now, we dont care)
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -113,7 +113,7 @@ void VulkanApplication::createGraphicsPipeline() {
     // Create shader modules
     // (Since the SPIR-V code is not made into machine code until the pipeline is created, these objects can be local and deleted)
     VkShaderModule  vertShaderModule = createShaderModule(vertShaderCode),
-        fragShaderModule = createShaderModule(fragShaderCode);
+                    fragShaderModule = createShaderModule(fragShaderCode);
 
     // Assign shader pipeline stages to each of the modules
     //vertex shader
@@ -138,20 +138,14 @@ void VulkanApplication::createGraphicsPipeline() {
     // (For now, there are no inputs to the vertex shader)
     VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-
-    auto bindingDescription = Particle::getBindingDescription();
-    auto attributeDescriptions = Particle::getAttributeDescriptions();
-
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &bindingDescription;
-    vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size());
-    vertexInputInfo.pVertexAttributeDescriptions = attributeDescriptions.data();
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
 
     // Set up input assembly
     // (For now, simple triangles)
     VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
     // Set up viewport
@@ -194,7 +188,7 @@ void VulkanApplication::createGraphicsPipeline() {
     rasterizer.polygonMode = VK_POLYGON_MODE_FILL; // VK_POLYGON_MODE_FILL / (VK_POLYGON_MODE_LINE / VK_POLYGON_MODE_POINT)
     rasterizer.lineWidth = 1.0f; // > 1 requires wideLines GPU feature
     rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 
     // Depth bias is not necessary for this case. Can be useful for biasing depth based on i.e. slope.
     rasterizer.depthBiasEnable = VK_FALSE;
@@ -337,7 +331,7 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     // Set which clear values VK_ATTACHMENT_LOAD_OP_CLEAR will use
     // Needs to be in the same order as attachments!
-    std::array<VkClearValue, 2> clearValues;
+    std::array<VkClearValue, 1> clearValues;
     clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
 
     renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());;
@@ -373,13 +367,7 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
     vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
 
     // Draw
-    vkCmdDraw(
-        commandBuffer,
-        PARTICLE_COUNT,
-        1,
-        0,
-        0
-    );
+    vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
     // End render pass
     vkCmdEndRenderPass(commandBuffer);
