@@ -107,7 +107,24 @@ struct SwapChainSupportDetails {
  *  Struct for storing UBO data.
  */
 struct UniformBufferObject {
-    float deltaTime = 1.0f;
+    // Camera
+    glm::vec2   screenSize;
+    float       fov,
+                focusDistance;
+    glm::vec3   cameraPos;
+    alignas(16) glm::mat4 localToWorld;
+    int         frameNumber;
+
+    // Raytracing settings
+    unsigned int    maxBounces,
+                    raysPerFrag;
+    float           divergeStrength,
+                    blackholePower;
+
+    // Other
+    unsigned int    spheresCount,
+                    blackholesCount;
+    float           deltaTime;
 };
 
 /**
