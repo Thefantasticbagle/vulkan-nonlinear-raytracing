@@ -189,6 +189,10 @@ public:
 
         createFramebuffers();
 
+        createTextureImage();
+        createTextureImageView();
+        //createTextureSampler();
+
         createSSBO();
         createUniformBuffers();
         createDescriptorPool();
@@ -249,6 +253,12 @@ private:
     VkCommandPool commandPool;
     std::vector<VkCommandBuffer> commandBuffers;
     std::vector<VkCommandBuffer> compCommandBuffers;
+
+    // Texture
+    VkImage         textureImage;
+    VkDeviceMemory  textureImageMemory;
+    VkImageView     textureImageView;
+    //VkSampler       textureSampler;
 
     // Compute
     VkPipelineLayout computePipelineLayout;
@@ -321,6 +331,19 @@ private:
     void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
 
+    void createImage();
+    void transitionImageLayout(
+        VkImage image,
+        VkFormat format,
+        VkImageLayout oldLayout,
+        VkImageLayout newLayout,
+        uint32_t mipLevels);
+    bool hasStencilComponent(VkFormat format);
+
+    void createTextureImage();
+    void createTextureImageView();
+    //void createTextureSampler();
+
     void createSSBO();
     void createUniformBuffers();
     void createDescriptorPool();
@@ -334,6 +357,16 @@ private:
     void cleanup();
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
+    void createImage(
+        uint32_t width,
+        uint32_t height,
+        uint32_t mipLevels,
+        VkFormat format,
+        VkImageTiling tiling,
+        VkImageUsageFlags usage,
+        VkMemoryPropertyFlags properties,
+        VkImage& image,
+        VkDeviceMemory& imageMemory);
 
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createBuffer(

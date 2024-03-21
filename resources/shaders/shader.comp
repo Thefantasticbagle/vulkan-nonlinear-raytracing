@@ -35,11 +35,15 @@ layout(std140, binding = 2) buffer ParticleSSBOOut {
    Particle particlesOut[ ];
 };
 
-layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout (binding = 3, rgba8) writeonly uniform image2D image;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
 void main() 
 {
     uint index = gl_GlobalInvocationID.x;
+
+    imageStore(image, ivec2(gl_GlobalInvocationID.xy), vec4( gl_GlobalInvocationID.x / 256.f, 0, 0, 1 ));
 
     Particle particleIn = particlesIn[index];
 

@@ -73,7 +73,7 @@ void VulkanApplication::createRenderPass() {
  *  Creates the descriptor set for buffers.
  */
 void VulkanApplication::createDescriptorSetLayout() {
-    std::array<VkDescriptorSetLayoutBinding, 3> layoutBindings{};
+    std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
     layoutBindings[0].binding = 0;
     layoutBindings[0].descriptorCount = 1;
     layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -92,9 +92,22 @@ void VulkanApplication::createDescriptorSetLayout() {
     layoutBindings[2].pImmutableSamplers = nullptr;
     layoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
+    layoutBindings[3].binding = 3;
+    layoutBindings[3].descriptorCount = 1;
+    layoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    layoutBindings[3].pImmutableSamplers = nullptr;
+    layoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    // TODO: ADD SAMPLER
+    /*layoutBindings[4].binding = 4;
+    layoutBindings[4].descriptorCount = 1;
+    layoutBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    layoutBindings[4].pImmutableSamplers = nullptr;
+    layoutBindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;*/
+
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = 3;
+    layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
     layoutInfo.pBindings = layoutBindings.data();
 
     if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
@@ -348,6 +361,7 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     // Bind pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -398,7 +412,7 @@ void VulkanApplication::recordComputeCommandBuffer(VkCommandBuffer commandBuffer
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
 
     // Dispatch and commit
-    vkCmdDispatch(commandBuffer, PARTICLE_COUNT / 256, 1, 1);
+    vkCmdDispatch(commandBuffer, 256, 256, 1); // TODO: ADD PARTICLE_COUNT VARIABLE
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::RECORD_COMPUTE_COMMAND_BUFFER::COMMIT_FAILED");
 }
