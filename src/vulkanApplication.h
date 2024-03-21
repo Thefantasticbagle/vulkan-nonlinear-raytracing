@@ -180,26 +180,32 @@ public:
 
         createSwapChain();
         createImageViews();
-
         createRenderPass();
-        createDescriptorSetLayout();
-        createGraphicsPipeline();
-        createComputePipeline();
-        createCommandPool();
-
         createFramebuffers();
+
+        createCommandPool();
 
         createTextureImage();
         createTextureImageView();
-        //createTextureSampler();
+        createTextureSampler();
 
         createSSBO();
         createUniformBuffers();
-        createDescriptorPool();
-        createDescriptorSets();
 
-        createCommandBuffers();
+        createComputeDescriptorPool();
+        createFragmentDescriptorPool();
+
+        createComputeDescriptorSetLayout();
+        createFragmentDescriptorSetLayout();
+        
+        createComputeDescriptorSets();
+        createFragmentDescriptorSets();
+
         createComputeCommandBuffers();
+        createGraphicsCommandBuffers();
+
+        createGraphicsPipeline();
+        createComputePipeline();
 
         createSyncObjects();
 
@@ -246,44 +252,47 @@ private:
     std::vector<VkImageView> swapChainImageViews;
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
-    // Rendering (Renderpass, pipelines, commandpool)
-    VkRenderPass renderPass;
-    VkPipelineLayout pipelineLayout;
-    VkPipeline graphicsPipeline;
-    VkCommandPool commandPool;
-    std::vector<VkCommandBuffer> commandBuffers;
-    std::vector<VkCommandBuffer> compCommandBuffers;
+    // Global (Graphics + Compute)
+    VkCommandPool    commandPool;
 
     // Texture
     VkImage         textureImage;
     VkDeviceMemory  textureImageMemory;
     VkImageView     textureImageView;
-    //VkSampler       textureSampler;
-
-    // Compute
-    VkPipelineLayout computePipelineLayout;
-    VkPipeline computePipeline;
+    VkSampler       textureSampler;
 
     // SSBO
-    std::vector<VkBuffer> shaderStorageBuffers;
+    std::vector<VkBuffer>       shaderStorageBuffers;
     std::vector<VkDeviceMemory> shaderStorageBuffersMemory;
 
     // Uniform buffer
-    std::vector<VkBuffer> uniformBuffers;
+    std::vector<VkBuffer>       uniformBuffers;
     std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*> uniformBuffersMapped;
+    std::vector<void*>          uniformBuffersMapped;
 
-    // Descriptor sets
-    VkDescriptorSetLayout descriptorSetLayout;
-    std::vector<VkDescriptorSet> descriptorSets;
-    VkDescriptorPool descriptorPool;
+    // Graphics
+    VkRenderPass                    renderPass;
+    VkPipelineLayout                graphicsPipelineLayout;
+    VkPipeline                      graphicsPipeline;
+    std::vector<VkCommandBuffer>    graphicsCommandBuffers;
+    VkDescriptorPool                graphicsDescriptorPool;
+    VkDescriptorSetLayout           fragmentDescriptorSetLayout;
+    std::vector<VkDescriptorSet>    fragmentDescriptorSets;
+
+    // Compute
+    VkPipelineLayout                computePipelineLayout;
+    VkPipeline                      computePipeline;
+    std::vector<VkCommandBuffer>    computeCommandBuffers;
+    VkDescriptorPool                computeDescriptorPool;
+    VkDescriptorSetLayout           computeDescriptorSetLayout;
+    std::vector<VkDescriptorSet>    computeDescriptorSets;
 
     // Synchronization
-    std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
-    std::vector<VkSemaphore> computeFinishedSemaphores;
-    std::vector<VkFence> inFlightFences;
-    std::vector<VkFence> computeInFlightFences;
+    std::vector<VkSemaphore>    imageAvailableSemaphores;
+    std::vector<VkSemaphore>    renderFinishedSemaphores;
+    std::vector<VkSemaphore>    computeFinishedSemaphores;
+    std::vector<VkFence>        inFlightFences;
+    std::vector<VkFence>        computeInFlightFences;
 
     // Drawing
     uint32_t currentFrame = 0;
@@ -323,13 +332,33 @@ private:
     void createImageViews();
     void createFramebuffers();
 
+    void createSSBO();
+    void createTextureImage();
+    void createTextureImageView();
+    void createTextureSampler();
+    void createUniformBuffers();
+    void updateUniformBuffer(uint32_t currentImage);
+
+    void createComputeDescriptorPool();
+    void createFragmentDescriptorPool();
+    void createComputeDescriptorSetLayout();
+    void createFragmentDescriptorSetLayout();
+    void createComputeDescriptorSets();
+    void createFragmentDescriptorSets();
+
     void createRenderPass();
-    void createDescriptorSetLayout();
     void createGraphicsPipeline();
     void createComputePipeline();
-    VkShaderModule createShaderModule(const std::vector<char>& code);
-    void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+
+    void createGraphicsCommandBuffers();
+    void createComputeCommandBuffers();
+    void recordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
+
+    void createSyncObjects();
+    void drawFrame();
+    
+    void cleanup();
 
     void createImage();
     void transitionImageLayout(
@@ -340,21 +369,7 @@ private:
         uint32_t mipLevels);
     bool hasStencilComponent(VkFormat format);
 
-    void createTextureImage();
-    void createTextureImageView();
-    //void createTextureSampler();
-
-    void createSSBO();
-    void createUniformBuffers();
-    void createDescriptorPool();
-    void createDescriptorSets();
-    void updateUniformBuffer(uint32_t currentImage);
-
-    void createSyncObjects();
-
-    void drawFrame();
-    
-    void cleanup();
+    VkShaderModule createShaderModule(const std::vector<char>& code);
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
     void createImage(
@@ -380,6 +395,4 @@ private:
     void createCommandPool();
     VkCommandBuffer beginSingleTimeCommands();
     void endSingleTimeCommands(VkCommandBuffer commandBuffer);
-    void createCommandBuffers();
-    void createComputeCommandBuffers();
 };

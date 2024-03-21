@@ -9,6 +9,7 @@ void VulkanApplication::cleanup() {
     vkDestroyImageView(device, textureImageView, nullptr);
     vkDestroyImage(device, textureImage, nullptr);
     vkFreeMemory(device, textureImageMemory, nullptr);
+    vkDestroySampler(device, textureSampler, nullptr);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
@@ -17,12 +18,14 @@ void VulkanApplication::cleanup() {
         vkDestroyBuffer(device, shaderStorageBuffers[i], nullptr);
         vkFreeMemory(device, shaderStorageBuffersMemory[i], nullptr);
     }
-    vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-    vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    vkDestroyDescriptorPool(device, computeDescriptorPool, nullptr);
+    vkDestroyDescriptorPool(device, graphicsDescriptorPool, nullptr);
+    vkDestroyDescriptorSetLayout(device, fragmentDescriptorSetLayout, nullptr);
+    vkDestroyDescriptorSetLayout(device, computeDescriptorSetLayout, nullptr);
 
     //pipeline
     vkDestroyPipeline(device, graphicsPipeline, nullptr);
-    vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+    vkDestroyPipelineLayout(device, graphicsPipelineLayout, nullptr);
 
     vkDestroyPipeline(device, computePipeline, nullptr);
     vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);

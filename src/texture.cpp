@@ -13,12 +13,12 @@ void VulkanApplication::createTextureImage() {
 
     // Create and allocate image
     createImage(
-        WIDTH,
-        HEIGHT,
+        static_cast<uint32_t>(swapChainExtent.width),
+        static_cast<uint32_t>(swapChainExtent.height),
         1,
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_TILING_OPTIMAL,
-        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT, // Sampled necessary for storage image?
+        VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         textureImage,
         textureImageMemory
@@ -45,31 +45,30 @@ void VulkanApplication::createTextureImageView() {
 /**
  *  Creates the sampler for the texture.
  */
-// TODO: ADD SAMPLER OR DELETE FUNCTIONS
-//void VulkanApplication::createTextureSampler() {
-//    // Create sampler
-//    VkSamplerCreateInfo samplerInfo{};
-//    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-//    samplerInfo.magFilter = VK_FILTER_LINEAR;
-//    samplerInfo.minFilter = VK_FILTER_LINEAR;
-//    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-//    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-//    samplerInfo.minLod = 0.0f; // To see effects: try static_cast<float>(mipLevels / 2);
-//    samplerInfo.maxLod = 1;
-//    samplerInfo.mipLodBias = 0.0f; // Optional
-//
-//    //set up anisotropic filtering
-//    VkPhysicalDeviceProperties properties{};
-//    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
-//
-//    samplerInfo.anisotropyEnable = VK_TRUE;
-//    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
-//
-//    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK; // Color of outside of texture dimensions
-//    samplerInfo.unnormalizedCoordinates = VK_FALSE; // True -> [0,width) and [0,height) instead of [0,1)
-//
-//    if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
-//        throw std::runtime_error("ERR::VULKAN::CREATE_TEXTURE_SAMPLER::CREATION_FAILED");
-//}
+void VulkanApplication::createTextureSampler() {
+    // Create sampler
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.minLod = 0.0f; // To see effects: try static_cast<float>(mipLevels / 2);
+    samplerInfo.maxLod = 1;
+    samplerInfo.mipLodBias = 0.0f; // Optional
+
+    //set up anisotropic filtering
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK; // Color of outside of texture dimensions
+    samplerInfo.unnormalizedCoordinates = VK_FALSE; // True -> [0,width) and [0,height) instead of [0,1)
+
+    if (vkCreateSampler(device, &samplerInfo, nullptr, &textureSampler) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_TEXTURE_SAMPLER::CREATION_FAILED");
+}

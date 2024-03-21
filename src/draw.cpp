@@ -14,11 +14,11 @@ void VulkanApplication::drawFrame() {
     // Reset fences before commiting new commands
     vkResetFences(device, 1, &computeInFlightFences[currentFrame]);
 
-    vkResetCommandBuffer(compCommandBuffers[currentFrame], 0);
-    recordComputeCommandBuffer(compCommandBuffers[currentFrame]);
+    vkResetCommandBuffer(computeCommandBuffers[currentFrame], 0);
+    recordComputeCommandBuffer(computeCommandBuffers[currentFrame]);
 
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &compCommandBuffers[currentFrame];
+    submitInfo.pCommandBuffers = &computeCommandBuffers[currentFrame];
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = &computeFinishedSemaphores[currentFrame];
 
@@ -54,9 +54,9 @@ void VulkanApplication::drawFrame() {
 
     // Record command buffer
     //make sure its empty
-    vkResetCommandBuffer(commandBuffers[currentFrame], 0);
+    vkResetCommandBuffer(graphicsCommandBuffers[currentFrame], 0);
     //rerecord
-    recordCommandBuffer(commandBuffers[currentFrame], imageIndex);
+    recordGraphicsCommandBuffer(graphicsCommandBuffers[currentFrame], imageIndex);
 
     // Submit command buffer
     submitInfo = {};
@@ -69,7 +69,7 @@ void VulkanApplication::drawFrame() {
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffers[currentFrame];
+    submitInfo.pCommandBuffers = &graphicsCommandBuffers[currentFrame];
 
     // Tell Vulkan which semaphores to signal once command buffer is done executing
     VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };

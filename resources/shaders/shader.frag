@@ -2,12 +2,10 @@
 
 layout(location = 0) in vec2 textureCoordinate;
 
-layout (binding = 3, rgba8) readonly uniform image2D image;
+layout(binding = 0) uniform sampler2D imageSampler;
 
 layout(location = 0) out vec4 outColor;
 
 void main() {
-    ivec2 uv = ivec2(textureCoordinate * 256.f);
-
-    outColor = imageLoad(image, uv);
+    outColor = texture(imageSampler, textureCoordinate);
 }

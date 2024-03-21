@@ -67,8 +67,8 @@ void VulkanApplication::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
 /**
  *  Allocates a commandbuffer.
  */
-void VulkanApplication::createCommandBuffers() {
-    commandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+void VulkanApplication::createGraphicsCommandBuffers() {
+    graphicsCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     // Create command buffer allocator
     VkCommandBufferAllocateInfo allocInfo{};
@@ -77,9 +77,9 @@ void VulkanApplication::createCommandBuffers() {
     // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
     // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)commandBuffers.size();
+    allocInfo.commandBufferCount = (uint32_t)graphicsCommandBuffers.size();
 
-    if (vkAllocateCommandBuffers(device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(device, &allocInfo, graphicsCommandBuffers.data()) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
 }
 
@@ -87,7 +87,7 @@ void VulkanApplication::createCommandBuffers() {
  *  Allocate a commandbuffer for compute.
  */
 void VulkanApplication::createComputeCommandBuffers() {
-    compCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+    computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
     // Create command buffer allocator
     VkCommandBufferAllocateInfo allocInfo{};
@@ -96,8 +96,8 @@ void VulkanApplication::createComputeCommandBuffers() {
     // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
     // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
     allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-    allocInfo.commandBufferCount = (uint32_t)compCommandBuffers.size();
+    allocInfo.commandBufferCount = (uint32_t)computeCommandBuffers.size();
 
-    if (vkAllocateCommandBuffers(device, &allocInfo, compCommandBuffers.data()) != VK_SUCCESS)
+    if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
 }

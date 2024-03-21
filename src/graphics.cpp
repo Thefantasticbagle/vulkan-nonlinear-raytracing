@@ -1,7 +1,6 @@
 #include "vulkanApplication.h"
 
 #include <array>
-#include <iostream>
 
 /**
  *  Creates render pass object.
@@ -72,46 +71,94 @@ void VulkanApplication::createRenderPass() {
 /**
  *  Creates the descriptor set for buffers.
  */
-void VulkanApplication::createDescriptorSetLayout() {
-    std::array<VkDescriptorSetLayoutBinding, 4> layoutBindings{};
+void VulkanApplication::createFragmentDescriptorSetLayout() {
+    std::array<VkDescriptorSetLayoutBinding, 1> layoutBindings{};
+
     layoutBindings[0].binding = 0;
     layoutBindings[0].descriptorCount = 1;
-    layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     layoutBindings[0].pImmutableSamplers = nullptr;
-    layoutBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    layoutBindings[1].binding = 1;
-    layoutBindings[1].descriptorCount = 1;
-    layoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    layoutBindings[1].pImmutableSamplers = nullptr;
-    layoutBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    layoutBindings[2].binding = 2;
-    layoutBindings[2].descriptorCount = 1;
-    layoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    layoutBindings[2].pImmutableSamplers = nullptr;
-    layoutBindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    layoutBindings[3].binding = 3;
-    layoutBindings[3].descriptorCount = 1;
-    layoutBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    layoutBindings[3].pImmutableSamplers = nullptr;
-    layoutBindings[3].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // TODO: ADD SAMPLER
-    /*layoutBindings[4].binding = 4;
-    layoutBindings[4].descriptorCount = 1;
-    layoutBindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layoutBindings[4].pImmutableSamplers = nullptr;
-    layoutBindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;*/
+    layoutBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
     layoutInfo.pBindings = layoutBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
+    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &fragmentDescriptorSetLayout) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_GRAPHICS_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
+}
+
+/**
+  *  Creates a pool that can allocate as many UBO descriptors as there are in-flight frames.
+  */
+void VulkanApplication::createFragmentDescriptorPool() {
+    // Create a pool which contains as many descriptors as there are in-flight frames
+    std::array<VkDescriptorPoolSize, 1> poolSizes{};
+
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    /*
+        "Aside from the maximum number of individual descriptors that are available,
+        we also need to specify the maximum number of descriptor sets that may be allocated."'
+        ? what is the difference
+    */
+    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+    if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &graphicsDescriptorPool) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_GRAPHICS_DESCRIPTOR_POOL::CREATION_FAILED");
+}
+
+/**
+ *  Allocates UBO descriptors from the pool.
+ */
+void VulkanApplication::createFragmentDescriptorSets() {
+    // Prepare as many descriptor sets as there are frames-in-flight
+    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, fragmentDescriptorSetLayout);
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = graphicsDescriptorPool;
+    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    allocInfo.pSetLayouts = layouts.data();
+
+    // Allocate the descriptors
+    // (these are automatically destroyed when pool is deleted)
+    // (Also, if createDescriptorPool is wrong, this might not give any warnings)
+    fragmentDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+    auto err = vkAllocateDescriptorSets(device, &allocInfo, fragmentDescriptorSets.data());
+    if (err != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_FRAGMENT_DESCRIPTOR_SETS::DESCRIPTOR_SETS_ALLOCATION_FAILED");
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        // Configure descriptor writes
+        std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        imageInfo.imageView = textureImageView;
+        imageInfo.sampler = textureSampler;
+
+        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrites[0].dstSet = fragmentDescriptorSets[i];
+        descriptorWrites[0].dstBinding = 0;
+        descriptorWrites[0].dstArrayElement = 0; // i = 0
+        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrites[0].descriptorCount = 1; // i = array.count()
+        descriptorWrites[0].pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+    }
+
+    /*
+        Note: It is possible to have multiple descriptor sets, in that case use this to access them in shader:
+            layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
+        One example of such a use is for different objects with completely different UBO fields.
+    */
 }
 
 /**
@@ -250,11 +297,11 @@ void VulkanApplication::createGraphicsPipeline() {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout; // Why can we use multiple layout descriptors??
+    pipelineLayoutInfo.pSetLayouts = &fragmentDescriptorSetLayout; // Why can we use multiple layout descriptors??
     pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
-    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+    if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &graphicsPipelineLayout) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::CREATE_GRAPHICS_PIPELINE::PIPELINE_LAYOUT_CREATION_FAILED");
 
     // Finally fill up pipeline structure with objects made so far!
@@ -273,7 +320,7 @@ void VulkanApplication::createGraphicsPipeline() {
     pipelineInfo.pDynamicState = &dynamicState;
 
     //fixed-function
-    pipelineInfo.layout = pipelineLayout;
+    pipelineInfo.layout = graphicsPipelineLayout;
 
     //pipeline layout
     //see https://registry.khronos.org/vulkan/specs/1.3-extensions/html/chap8.html#renderpass-compatibility for compatibility
@@ -321,7 +368,7 @@ VkShaderModule VulkanApplication::createShaderModule(const std::vector<char>& co
 /**
  *  Re records a given command buffer with an image in the swapchain.
  */
-void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+void VulkanApplication::recordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     // Supply details about the usage of this specific command buffer
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -361,7 +408,7 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
 
     // Bind pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelineLayout, 0, 1, &fragmentDescriptorSets[currentFrame], 0, nullptr);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -389,30 +436,4 @@ void VulkanApplication::recordCommandBuffer(VkCommandBuffer commandBuffer, uint3
     // Finish recording to command buffer
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::RECORD_COMMAND_BUFFER::COMMIT_FAILED");
-}
-
-/**
- *  Records the command buffer for Compute.
- */
-void VulkanApplication::recordComputeCommandBuffer(VkCommandBuffer commandBuffer) {
-    // Supply details about the usage of this specific command buffer
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-    // VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT      - Record after executing once.
-    // VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT - Secondary command buffer which is entirely contained by a single render pass.
-    // VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT     - Can be resubmitted WHILE pending execution.
-    beginInfo.flags = 0; // Optional
-    beginInfo.pInheritanceInfo = nullptr; // Optional
-
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::RECORD_COMPUTE_COMMAND_BUFFER::COMMAND_BUFFER_BEGIN_FAILED");
-
-    // Bind pipeline
-    vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &descriptorSets[currentFrame], 0, nullptr);
-
-    // Dispatch and commit
-    vkCmdDispatch(commandBuffer, 256, 256, 1); // TODO: ADD PARTICLE_COUNT VARIABLE
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::RECORD_COMPUTE_COMMAND_BUFFER::COMMIT_FAILED");
 }
