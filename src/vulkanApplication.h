@@ -9,6 +9,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "raytracing.hpp"
+#include "buffer.hpp"
+#include "command.hpp"
+#include "image.hpp"
+#include "texture.hpp"
+
 #include <vector>
 #include <optional>
 #include <fstream>
@@ -18,7 +24,7 @@
 const uint32_t  WIDTH = 800;
 const uint32_t  HEIGHT = 600;
 const int       MAX_FRAMES_IN_FLIGHT = 2;
-const uint32_t PARTICLE_COUNT = 8192;
+const uint32_t  PARTICLE_COUNT = WIDTH * HEIGHT;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -104,64 +110,6 @@ struct SwapChainSupportDetails {
 };
 
 /**
- *  Struct for storing UBO data.
- */
-struct UniformBufferObject {
-    // Camera
-    glm::vec2   screenSize;
-    float       fov,
-                focusDistance;
-    glm::vec3   cameraPos;
-    alignas(16) glm::mat4 localToWorld;
-    int         frameNumber;
-
-    // Raytracing settings
-    unsigned int    maxBounces,
-                    raysPerFrag;
-    float           divergeStrength,
-                    blackholePower;
-
-    // Other
-    unsigned int    spheresCount,
-                    blackholesCount;
-    float           deltaTime;
-};
-
-/**
- *  TODO: Replace
- */
-struct Particle {
-    glm::vec2 position;
-    glm::vec2 velocity;
-    glm::vec4 color;
-
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Particle);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Particle, position);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Particle, color);
-
-        return attributeDescriptions;
-    }
-};
-
-/**
  *	The vulkan application class.
  */
 class VulkanApplication {
@@ -183,14 +131,38 @@ public:
         createRenderPass();
         createFramebuffers();
 
-        createCommandPool();
+        createCommandPool(
+            physicalDevice,
+            device,
+            findQueueFamilies(physicalDevice).graphicsAndComputeFamily.value(),
+            commandPool );
 
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
+        createTextureImage(
+            static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height),
+            device, physicalDevice, commandPool, graphicsQueue,
+            textureImage, textureImageMemory );
+        createTextureImageView(
+            textureImage,
+            device,
+            textureImageView );
+        createTextureSampler(
+            physicalDevice, device,
+            textureSampler );
 
-        createSSBO();
-        createUniformBuffers();
+        // Testing data
+        RTSphere s = RTSphere();
+        RTMaterial m = RTMaterial();
+        m.emissionColor = glm::vec4(0, 1, 1, 1);
+        s.material = m;
+
+        createSSBO(
+            physicalDevice, device,
+            commandPool, computeQueue,
+            std::vector<RTSphere>(PARTICLE_COUNT, s),
+            shaderStorageBuffers, shaderStorageBuffersMemory );
+        createUniformBuffers<RTParams>(
+            physicalDevice, device,
+            uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
 
         createComputeDescriptorPool();
         createFragmentDescriptorPool();
@@ -217,6 +189,7 @@ public:
             double currentTime = glfwGetTime();
             lastFrameTime = (currentTime - lastTime) * 1000.0;
             lastTime = currentTime;
+            totalTime += lastFrameTime;
         }
 
         vkDeviceWaitIdle(device);
@@ -298,6 +271,7 @@ private:
     uint32_t currentFrame = 0;
     float lastFrameTime = 0.0f;
     double lastTime = 0.0f;
+    float totalTime = 0.f;
 
     // Functions
     void initWindow();
@@ -332,13 +306,6 @@ private:
     void createImageViews();
     void createFramebuffers();
 
-    void createSSBO();
-    void createTextureImage();
-    void createTextureImageView();
-    void createTextureSampler();
-    void createUniformBuffers();
-    void updateUniformBuffer(uint32_t currentImage);
-
     void createComputeDescriptorPool();
     void createFragmentDescriptorPool();
     void createComputeDescriptorSetLayout();
@@ -350,8 +317,8 @@ private:
     void createGraphicsPipeline();
     void createComputePipeline();
 
-    void createGraphicsCommandBuffers();
-    void createComputeCommandBuffers();
+    //void createGraphicsCommandBuffers();
+    //void createComputeCommandBuffers();
     void recordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
 
@@ -360,39 +327,45 @@ private:
     
     void cleanup();
 
-    void createImage();
-    void transitionImageLayout(
-        VkImage image,
-        VkFormat format,
-        VkImageLayout oldLayout,
-        VkImageLayout newLayout,
-        uint32_t mipLevels);
-    bool hasStencilComponent(VkFormat format);
-
     VkShaderModule createShaderModule(const std::vector<char>& code);
 
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-    void createImage(
-        uint32_t width,
-        uint32_t height,
-        uint32_t mipLevels,
-        VkFormat format,
-        VkImageTiling tiling,
-        VkImageUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkImage& image,
-        VkDeviceMemory& imageMemory);
+    /**
+     *  Allocates a commandbuffer.
+     *  TODO: MAKE FUNCTIONAL.
+     */
+    void createGraphicsCommandBuffers() {
+        graphicsCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    void createBuffer(
-        VkDeviceSize size,
-        VkBufferUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkBuffer& buffer,
-        VkDeviceMemory& bufferMemory);
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+        // Create command buffer allocator
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)graphicsCommandBuffers.size();
 
-    void createCommandPool();
-    VkCommandBuffer beginSingleTimeCommands();
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+        if (vkAllocateCommandBuffers(device, &allocInfo, graphicsCommandBuffers.data()) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+    }
+
+    /**
+     *  Allocate a commandbuffer for compute.
+     *  TODO: MAKE FUNCTIONAL.
+     */
+    void createComputeCommandBuffers() {
+        computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+        // Create command buffer allocator
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)computeCommandBuffers.size();
+
+        if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+    }
 };

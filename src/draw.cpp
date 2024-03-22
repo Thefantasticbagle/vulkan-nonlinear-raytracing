@@ -9,7 +9,7 @@ void VulkanApplication::drawFrame() {
     vkWaitForFences(device, 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
     // Update UBO contents
-    updateUniformBuffer(currentFrame);
+    //updateUniformBuffer(currentFrame); // TODO: UNCOMMENT
 
     // Reset fences before commiting new commands
     vkResetFences(device, 1, &computeInFlightFences[currentFrame]);

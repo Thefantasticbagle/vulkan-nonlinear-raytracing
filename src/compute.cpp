@@ -95,7 +95,7 @@ void VulkanApplication::createComputeDescriptorSets() {
         VkDescriptorBufferInfo bufferInfo{};
         bufferInfo.buffer = uniformBuffers[i];
         bufferInfo.offset = 0;
-        bufferInfo.range = sizeof(UniformBufferObject);
+        bufferInfo.range = sizeof(RTParams);
 
         // Configure descriptor writes
         std::array<VkWriteDescriptorSet, 4> descriptorWrites{};
@@ -111,7 +111,7 @@ void VulkanApplication::createComputeDescriptorSets() {
         VkDescriptorBufferInfo storageBufferInfoLastFrame{};
         storageBufferInfoLastFrame.buffer = shaderStorageBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
         storageBufferInfoLastFrame.offset = 0;
-        storageBufferInfoLastFrame.range = sizeof(Particle) * PARTICLE_COUNT;
+        storageBufferInfoLastFrame.range = sizeof(RTSphere) * PARTICLE_COUNT;
 
         descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[1].dstSet = computeDescriptorSets[i];
@@ -124,7 +124,7 @@ void VulkanApplication::createComputeDescriptorSets() {
         VkDescriptorBufferInfo storageBufferInfoCurrentFrame{};
         storageBufferInfoCurrentFrame.buffer = shaderStorageBuffers[i];
         storageBufferInfoCurrentFrame.offset = 0;
-        storageBufferInfoCurrentFrame.range = sizeof(Particle) * PARTICLE_COUNT;
+        storageBufferInfoCurrentFrame.range = sizeof(RTSphere) * PARTICLE_COUNT;
 
         descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[2].dstSet = computeDescriptorSets[i];
