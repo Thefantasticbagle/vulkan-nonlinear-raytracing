@@ -10,6 +10,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "raytracing.hpp"
+#include "buffer.hpp"
+#include "command.hpp"
 
 #include <vector>
 #include <optional>
@@ -127,7 +129,11 @@ public:
         createRenderPass();
         createFramebuffers();
 
-        createCommandPool();
+        createCommandPool(
+            physicalDevice,
+            device,
+            findQueueFamilies(physicalDevice).graphicsAndComputeFamily.value(),
+            commandPool );
 
         createTextureImage();
         createTextureImageView();
@@ -143,7 +149,12 @@ public:
             std::vector<RTSphere>(PARTICLE_COUNT, s),
             shaderStorageBuffers,
             shaderStorageBuffersMemory );
-        createUniformBuffers();
+        createUniformBuffers<RTParams>(
+            physicalDevice,
+            device,
+            uniformBuffers,
+            uniformBuffersMemory,
+            uniformBuffersMapped);
 
         createComputeDescriptorPool();
         createFragmentDescriptorPool();
@@ -305,6 +316,7 @@ private:
             bufferSize,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            physicalDevice, device,
             stagingBuffer, stagingBufferMemory
         );
 
@@ -322,9 +334,12 @@ private:
                 bufferSize, 
                 VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
                 VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+                physicalDevice, device,
                 buffer[i], bufferMemory[i]
             );
-            copyBuffer(stagingBuffer, buffer[i], bufferSize);
+            copyBuffer(
+                stagingBuffer, buffer[i], bufferSize,
+                device, commandPool, computeQueue );
         }
 
         // Cleanup
@@ -335,8 +350,6 @@ private:
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
-    void createUniformBuffers();
-    void updateUniformBuffer(uint32_t currentImage);
 
     void createComputeDescriptorPool();
     void createFragmentDescriptorPool();
@@ -349,8 +362,8 @@ private:
     void createGraphicsPipeline();
     void createComputePipeline();
 
-    void createGraphicsCommandBuffers();
-    void createComputeCommandBuffers();
+    //void createGraphicsCommandBuffers();
+    //void createComputeCommandBuffers();
     void recordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
 
@@ -380,16 +393,43 @@ private:
         uint32_t mipLevels);
     bool hasStencilComponent(VkFormat format);
 
-    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
-    void createBuffer(
-        VkDeviceSize size,
-        VkBufferUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkBuffer& buffer,
-        VkDeviceMemory& bufferMemory);
-    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    /**
+     *  Allocates a commandbuffer.
+     *  TODO: MAKE FUNCTIONAL.
+     */
+    void createGraphicsCommandBuffers() {
+        graphicsCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
 
-    void createCommandPool();
-    VkCommandBuffer beginSingleTimeCommands();
-    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+        // Create command buffer allocator
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)graphicsCommandBuffers.size();
+
+        if (vkAllocateCommandBuffers(device, &allocInfo, graphicsCommandBuffers.data()) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+    }
+
+    /**
+     *  Allocate a commandbuffer for compute.
+     *  TODO: MAKE FUNCTIONAL.
+     */
+    void createComputeCommandBuffers() {
+        computeCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
+        // Create command buffer allocator
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = commandPool;
+        // VK_COMMAND_BUFFER_LEVEL_PRIMARY   - Can be submitted, cannot be called from other command buffers.
+        // VK_COMMAND_BUFFER_LEVEL_SECONDARY - Cannot be submitted, can be called from primary buffers (good for reuse).
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = (uint32_t)computeCommandBuffers.size();
+
+        if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+    }
 };

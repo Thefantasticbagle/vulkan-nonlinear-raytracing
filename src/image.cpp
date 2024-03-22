@@ -76,7 +76,7 @@ void VulkanApplication::createImage(
     VkMemoryAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
-    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
+    allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
 
     if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::CREATE_IMAGE::MEMORY_ALLOC_FAILURE");
@@ -94,7 +94,7 @@ void VulkanApplication::transitionImageLayout (
     VkImageLayout newLayout,
     uint32_t mipLevels
 ) {
-    VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
 
     // Set up barrier
     VkImageMemoryBarrier barrier{};
@@ -201,7 +201,7 @@ void VulkanApplication::transitionImageLayout (
         1, &barrier
     );
 
-    endSingleTimeCommands(commandBuffer);
+    endSingleTimeCommands(commandBuffer, commandPool, device, graphicsQueue); // TODO: ADD A WAY TO CHANGE QUEUE
 }
 
 /**
