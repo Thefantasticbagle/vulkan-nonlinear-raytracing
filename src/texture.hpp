@@ -1,10 +1,23 @@
-#include "vulkanApplication.h"
+#pragma once
 
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include "image.hpp"
 
 /**
  *  Reads, allocates, and creates an example texture.
  */
-void VulkanApplication::createTextureImage() {
+void inline createTextureImage(
+    uint32_t            width,
+    uint32_t            height,
+    VkDevice            device,
+    VkPhysicalDevice    physicalDevice,
+    VkCommandPool       commandPool,
+    VkQueue             queue,
+    VkImage             & textureImage,
+    VkDeviceMemory      & textureImageMemory
+) {
     // Check if image format supports linear blit
     /*VkFormatProperties formatProperties;
     vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
@@ -13,13 +26,13 @@ void VulkanApplication::createTextureImage() {
 
     // Create and allocate image
     createImage(
-        static_cast<uint32_t>(swapChainExtent.width),
-        static_cast<uint32_t>(swapChainExtent.height),
-        1,
+        width, height, 1,
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_TILING_OPTIMAL,
         VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        physicalDevice,
+        device,
         textureImage,
         textureImageMemory
     );
@@ -31,21 +44,32 @@ void VulkanApplication::createTextureImage() {
         VK_FORMAT_R8G8B8A8_UNORM,
         VK_IMAGE_LAYOUT_UNDEFINED,
         VK_IMAGE_LAYOUT_GENERAL,//VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        1
+        1,
+        device,
+        commandPool,
+        queue
     );
 }
 
 /**
  *  Creates the view for the texture.
  */
-void VulkanApplication::createTextureImageView() {
-    textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+void inline createTextureImageView(
+    VkImage     textureImage,
+    VkDevice    device,
+    VkImageView & textureImageView
+) {
+    textureImageView = createImageView(textureImage, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, 1, device);
 }
 
 /**
  *  Creates the sampler for the texture.
  */
-void VulkanApplication::createTextureSampler() {
+void inline createTextureSampler(
+    VkPhysicalDevice    physicalDevice,
+    VkDevice            device,
+    VkSampler           & textureSampler
+) {
     // Create sampler
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;

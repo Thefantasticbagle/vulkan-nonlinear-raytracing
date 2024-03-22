@@ -1,52 +1,47 @@
-#include "vulkanApplication.h"
+#pragma once
+
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include "buffer.hpp"
+
+#include <stdexcept>
+
 
 /**
-  *  Creates the view for an image with a given format.
-  */
-VkImageView VulkanApplication::createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) {
-    // Create image view struct
-    VkImageViewCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    createInfo.image = image;
-
-    // Other types include: 1D and 3D textures, cubemaps
-    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    createInfo.format = format;
-
-    // Use default mapping explicitly
-    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-
-    // Describe purpose of image and which parts should be accessed
-    // (For i.e. stereoscopic 3D, use multiple layers and different views for each eye)
-    createInfo.subresourceRange.aspectMask = aspectFlags;
-    createInfo.subresourceRange.baseMipLevel = 0; // No mipmapping
-    createInfo.subresourceRange.levelCount = mipLevels;
-    createInfo.subresourceRange.baseArrayLayer = 0;
-    createInfo.subresourceRange.layerCount = 1;
-
-    // Create image view and return
-    VkImageView imageView;
-    if (vkCreateImageView(device, &createInfo, nullptr, &imageView) != VK_SUCCESS)
-        throw std::runtime_error("failed to create image views!");
-    return imageView;
+ *  Simply checks if the given format contains a stencil component.
+ */
+bool inline hasStencilComponent(VkFormat format) {
+    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
 }
 
 /**
  *  Creates an image object and allocates memory for an image.
+ * 
+ *  @param width The width of the image.
+ *  @param height The height of the image.
+ *  @param mipLevels The number of mipmap levels.
+ *  @param format The image format.
+ *  @param tiling Tiling mode.
+ *  @param usage Image usage.
+ *  @param properties Image properties.
+ *  @param physicalDevice The Vulkan physical device.
+ *  @param device The Vulkan logical device.
+ *  @param image An empty variable for the image.
+ *  @param imageMemory An empty variable for the image memory.
  */
-void VulkanApplication::createImage(
-    uint32_t width,
-    uint32_t height,
-    uint32_t mipLevels,
-    VkFormat format,
-    VkImageTiling tiling,
-    VkImageUsageFlags usage,
-    VkMemoryPropertyFlags properties,
-    VkImage& image,
-    VkDeviceMemory& imageMemory
+void inline createImage(
+    uint32_t                width,
+    uint32_t                height,
+    uint32_t                mipLevels,
+    VkFormat                format,
+    VkImageTiling           tiling,
+    VkImageUsageFlags       usage,
+    VkMemoryPropertyFlags   properties,
+    VkPhysicalDevice        physicalDevice,
+    VkDevice                device,
+    VkImage                 & image,
+    VkDeviceMemory          & imageMemory
 ) {
     // Create Vulkan image
     VkImageCreateInfo imageInfo{};
@@ -85,14 +80,75 @@ void VulkanApplication::createImage(
 }
 
 /**
- *  Transitions an image from an old layout to a new one.
+ *  Creates the view for an image with a given format.
+ * 
+ *  @param image The image to create a view for.
+ *  @param format Format of the image.
+ *  @param aspectFlags Which aspects are included in the view.
+ *  @param mipLevels How many mipmap levels the image has.
+ *  @param device The Vulkan logical device.
+ * 
+ *  @return The image view.
  */
-void VulkanApplication::transitionImageLayout (
-    VkImage image,
-    VkFormat format,
-    VkImageLayout oldLayout,
-    VkImageLayout newLayout,
-    uint32_t mipLevels
+VkImageView inline createImageView(
+    VkImage             image,
+    VkFormat            format,
+    VkImageAspectFlags  aspectFlags,
+    uint32_t            mipLevels,
+    VkDevice            device
+) {
+    // Create image view struct
+    VkImageViewCreateInfo createInfo{};
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    createInfo.image = image;
+
+    // Other types include: 1D and 3D textures, cubemaps
+    createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    createInfo.format = format;
+
+    // Use default mapping explicitly
+    createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+
+    // Describe purpose of image and which parts should be accessed
+    // (For i.e. stereoscopic 3D, use multiple layers and different views for each eye)
+    createInfo.subresourceRange.aspectMask = aspectFlags;
+    createInfo.subresourceRange.baseMipLevel = 0; // No mipmapping
+    createInfo.subresourceRange.levelCount = mipLevels;
+    createInfo.subresourceRange.baseArrayLayer = 0;
+    createInfo.subresourceRange.layerCount = 1;
+
+    // Create image view and return
+    VkImageView imageView;
+    if (vkCreateImageView(device, &createInfo, nullptr, &imageView) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_IMAGE_VIEW::CREATION_FAILED");
+    return imageView;
+}
+
+/**
+ *  Transitions an image from an old layout to a new one.
+ *  Uses pre-programmed combinations.
+ * 
+ *  @param image The image to transition.
+ *  @param format The image format.
+ *  @param oldLayout The original image layout.
+ *  @param newLayout Which layout to transition to.
+ *  @param mipLevels the number of mipmap levels.
+ *  @param device The Vulkan logical device.
+ *  @param commandPool Command pool.
+ *  @param queue Queue.
+ */
+void inline transitionImageLayout (
+    VkImage         image,
+    VkFormat        format,
+    VkImageLayout   oldLayout,
+    VkImageLayout   newLayout,
+    uint32_t        mipLevels,
+    VkDevice        device,
+    VkCommandPool   commandPool,
+    VkQueue         queue
 ) {
     VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
 
@@ -201,12 +257,5 @@ void VulkanApplication::transitionImageLayout (
         1, &barrier
     );
 
-    endSingleTimeCommands(commandBuffer, commandPool, device, graphicsQueue); // TODO: ADD A WAY TO CHANGE QUEUE
-}
-
-/**
- *  Simply checks if the given format contains a stencil component.
- */
-bool VulkanApplication::hasStencilComponent(VkFormat format) {
-    return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+    endSingleTimeCommands(commandBuffer, commandPool, device, queue); // TODO: ADD A WAY TO CHANGE QUEUE
 }

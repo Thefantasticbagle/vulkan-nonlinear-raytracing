@@ -12,6 +12,8 @@
 #include "raytracing.hpp"
 #include "buffer.hpp"
 #include "command.hpp"
+#include "image.hpp"
+#include "texture.hpp"
 
 #include <vector>
 #include <optional>
@@ -135,9 +137,17 @@ public:
             findQueueFamilies(physicalDevice).graphicsAndComputeFamily.value(),
             commandPool );
 
-        createTextureImage();
-        createTextureImageView();
-        createTextureSampler();
+        createTextureImage(
+            static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height),
+            device, physicalDevice, commandPool, graphicsQueue,
+            textureImage, textureImageMemory );
+        createTextureImageView(
+            textureImage,
+            device,
+            textureImageView );
+        createTextureSampler(
+            physicalDevice, device,
+            textureSampler );
 
         // Testing data
         RTSphere s = RTSphere();
@@ -296,10 +306,6 @@ private:
     void createImageViews();
     void createFramebuffers();
 
-    void createTextureImage();
-    void createTextureImageView();
-    void createTextureSampler();
-
     void createComputeDescriptorPool();
     void createFragmentDescriptorPool();
     void createComputeDescriptorSetLayout();
@@ -322,25 +328,6 @@ private:
     void cleanup();
 
     VkShaderModule createShaderModule(const std::vector<char>& code);
-
-    VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
-    void createImage(
-        uint32_t width,
-        uint32_t height,
-        uint32_t mipLevels,
-        VkFormat format,
-        VkImageTiling tiling,
-        VkImageUsageFlags usage,
-        VkMemoryPropertyFlags properties,
-        VkImage& image,
-        VkDeviceMemory& imageMemory);
-    void transitionImageLayout(
-        VkImage image,
-        VkFormat format,
-        VkImageLayout oldLayout,
-        VkImageLayout newLayout,
-        uint32_t mipLevels);
-    bool hasStencilComponent(VkFormat format);
 
     /**
      *  Allocates a commandbuffer.
