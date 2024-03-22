@@ -1,0 +1,68 @@
+#version 450
+
+struct Particle {
+	vec2 position;
+	vec2 velocity;
+    vec4 color;
+};
+
+layout (binding = 0) uniform ParameterUBO {
+    // Camera
+    vec2        screenSize;
+    float       fov,
+                focusDistance;
+    vec3        cameraPos;
+    mat4        localToWorld;
+    int         frameNumber;
+
+    // Raytracing settings
+    uint            maxBounces,
+                    raysPerFrag;
+    float           divergeStrength,
+                    blackholePower;
+
+    // Other
+    uint            spheresCount,
+                    blackholesCount;
+    float           deltaTime;
+} ubo;
+
+layout(std140, binding = 1) readonly buffer ParticleSSBOIn {
+   Particle particlesIn[ ];
+};
+
+layout(std140, binding = 2) buffer ParticleSSBOOut {
+   Particle particlesOut[ ];
+};
+
+layout (binding = 3, rgba8) writeonly uniform image2D image;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+
+void main() 
+{
+    uint index = gl_GlobalInvocationID.x + uint(gl_GlobalInvocationID.y * ubo.screenSize.x);
+    Particle particleIn = particlesIn[index];
+
+    vec2 centreToPixelPos = gl_GlobalInvocationID.xy - ubo.screenSize / 2.f;
+    centreToPixelPos.x /= ubo.screenSize.x / 2.f;
+    centreToPixelPos.y /= ubo.screenSize.y / 2.f;
+
+//    particlesOut[index].position = particleIn.position + particleIn.velocity.xy * ubo.deltaTime;
+//    particlesOut[index].velocity = particleIn.velocity;
+//
+//    // Flip movement at window border
+//    if ((particlesOut[index].position.x <= -1.0) || (particlesOut[index].position.x >= 1.0)) {
+//        particlesOut[index].velocity.x = -particlesOut[index].velocity.x;
+//    }
+//    if ((particlesOut[index].position.y <= -1.0) || (particlesOut[index].position.y >= 1.0)) {
+//        particlesOut[index].velocity.y = -particlesOut[index].velocity.y;
+//    }
+
+    particlesOut[index].position = vec2(sin(ubo.deltaTime), cos(ubo.deltaTime));
+
+    //vec4 outColor = vec4(particleIn.position, 0, 1);
+    //vec4 outColor = vec4(particlesOut[index].position, 0, 1);
+    vec4 outColor = vec4(distance( centreToPixelPos, particleIn.position ), 0, 0, 1);
+    imageStore(image, ivec2(gl_GlobalInvocationID.xy), outColor);
+}

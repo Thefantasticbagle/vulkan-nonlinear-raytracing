@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "raytracing.hpp"
+
 #include <vector>
 #include <optional>
 #include <fstream>
@@ -18,7 +20,7 @@
 const uint32_t  WIDTH = 800;
 const uint32_t  HEIGHT = 600;
 const int       MAX_FRAMES_IN_FLIGHT = 2;
-const uint32_t PARTICLE_COUNT = 8192;
+const uint32_t  PARTICLE_COUNT = WIDTH * HEIGHT;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -104,64 +106,6 @@ struct SwapChainSupportDetails {
 };
 
 /**
- *  Struct for storing UBO data.
- */
-struct UniformBufferObject {
-    // Camera
-    glm::vec2   screenSize;
-    float       fov,
-                focusDistance;
-    glm::vec3   cameraPos;
-    alignas(16) glm::mat4 localToWorld;
-    int         frameNumber;
-
-    // Raytracing settings
-    unsigned int    maxBounces,
-                    raysPerFrag;
-    float           divergeStrength,
-                    blackholePower;
-
-    // Other
-    unsigned int    spheresCount,
-                    blackholesCount;
-    float           deltaTime;
-};
-
-/**
- *  TODO: Replace
- */
-struct Particle {
-    glm::vec2 position;
-    glm::vec2 velocity;
-    glm::vec4 color;
-
-    static VkVertexInputBindingDescription getBindingDescription() {
-        VkVertexInputBindingDescription bindingDescription{};
-        bindingDescription.binding = 0;
-        bindingDescription.stride = sizeof(Particle);
-        bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-
-        return bindingDescription;
-    }
-
-    static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-        std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-
-        attributeDescriptions[0].binding = 0;
-        attributeDescriptions[0].location = 0;
-        attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-        attributeDescriptions[0].offset = offsetof(Particle, position);
-
-        attributeDescriptions[1].binding = 0;
-        attributeDescriptions[1].location = 1;
-        attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-        attributeDescriptions[1].offset = offsetof(Particle, color);
-
-        return attributeDescriptions;
-    }
-};
-
-/**
  *	The vulkan application class.
  */
 class VulkanApplication {
@@ -189,7 +133,16 @@ public:
         createTextureImageView();
         createTextureSampler();
 
-        createSSBO();
+        // Testing data
+        RTSphere s = RTSphere();
+        RTMaterial m = RTMaterial();
+        m.emissionColor = glm::vec4(0, 1, 1, 1);
+        s.material = m;
+
+        createSSBO(
+            std::vector<RTSphere>(PARTICLE_COUNT, s),
+            shaderStorageBuffers,
+            shaderStorageBuffersMemory );
         createUniformBuffers();
 
         createComputeDescriptorPool();
@@ -217,6 +170,7 @@ public:
             double currentTime = glfwGetTime();
             lastFrameTime = (currentTime - lastTime) * 1000.0;
             lastTime = currentTime;
+            totalTime += lastFrameTime;
         }
 
         vkDeviceWaitIdle(device);
@@ -298,6 +252,7 @@ private:
     uint32_t currentFrame = 0;
     float lastFrameTime = 0.0f;
     double lastTime = 0.0f;
+    float totalTime = 0.f;
 
     // Functions
     void initWindow();
@@ -332,7 +287,51 @@ private:
     void createImageViews();
     void createFramebuffers();
 
-    void createSSBO();
+    /**
+     *  Creates a set of SSBOs with the given data.
+     */
+    template <typename T>
+    void inline createSSBO(
+        std::vector<T>              data,
+        std::vector<VkBuffer>       & buffer,
+        std::vector<VkDeviceMemory> & bufferMemory
+    ) {
+        VkDeviceSize bufferSize = sizeof(T) * data.size();
+
+        // Create staging buffer
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        createBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            stagingBuffer, stagingBufferMemory
+        );
+
+        // Copy data to staging buffer
+        void* ptr;
+        vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &ptr);
+        memcpy(ptr, data.data(), (size_t)bufferSize);
+        vkUnmapMemory(device, stagingBufferMemory);
+
+        // Create SSBOs and copy staging buffer to them
+        buffer.resize(MAX_FRAMES_IN_FLIGHT);
+        bufferMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createBuffer(
+                bufferSize, 
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+                buffer[i], bufferMemory[i]
+            );
+            copyBuffer(stagingBuffer, buffer[i], bufferSize);
+        }
+
+        // Cleanup
+        vkDestroyBuffer(device, stagingBuffer, nullptr);
+        vkFreeMemory(device, stagingBufferMemory, nullptr);
+    }
+
     void createTextureImage();
     void createTextureImageView();
     void createTextureSampler();
@@ -360,15 +359,6 @@ private:
     
     void cleanup();
 
-    void createImage();
-    void transitionImageLayout(
-        VkImage image,
-        VkFormat format,
-        VkImageLayout oldLayout,
-        VkImageLayout newLayout,
-        uint32_t mipLevels);
-    bool hasStencilComponent(VkFormat format);
-
     VkShaderModule createShaderModule(const std::vector<char>& code);
 
     VkImageView createImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels);
@@ -382,6 +372,13 @@ private:
         VkMemoryPropertyFlags properties,
         VkImage& image,
         VkDeviceMemory& imageMemory);
+    void transitionImageLayout(
+        VkImage image,
+        VkFormat format,
+        VkImageLayout oldLayout,
+        VkImageLayout newLayout,
+        uint32_t mipLevels);
+    bool hasStencilComponent(VkFormat format);
 
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     void createBuffer(

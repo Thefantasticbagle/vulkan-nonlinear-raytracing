@@ -1,11 +1,76 @@
 #version 450
 
-struct Particle {
-	vec2 position;
-	vec2 velocity;
+// --- Macros ---
+#define HitInfo0 HitInfo( false, 0.0, vec3(0), vec3(0), Material(vec4(0), vec4(0), vec4(0), 0.0) )
+
+// --- Constants ---
+const float PI = radians(180);
+const bool  CULL_FACE = true;
+const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
+const int   RAY_SUBDIVISIONS = 25;
+const float RAY_STEP_RANDOMNESS = 0.025;
+
+const float kEpsilion = 0.001; // Rename to K_EPSILION?
+
+// --- Structs ---
+// RTMaterial
+struct Material {
     vec4 color;
+    vec4 emissionColor;
+    vec4 specularColor;
+    float smoothness;
 };
 
+// RTSphere
+struct Sphere {
+    float radius;
+    vec3 center;
+    Material material;
+};
+
+// RTTriangle
+struct Triangle {
+    vec3        p0,
+                p1,
+                p2,
+                normal0,
+                normal1,
+                normal2;
+    Material    material;
+};
+
+// RTMeshInfo
+struct MeshInfo {
+    uint    startIndex,
+            count;
+    vec3    boundingBoxMin,
+            boundingBoxMax;
+};
+
+// RTBlackhole
+struct Blackhole {
+    float   radius;
+    vec3    center;
+};
+
+// Hit information
+struct HitInfo {
+    bool        didHit;
+    float       dist;
+    vec3        pos;
+    vec3        normal;
+    Material    material;
+};
+
+// Ray
+struct Ray {
+    vec3 origin;
+    vec3 dir;
+    bool destroyed;
+};
+
+// --- Input/Output ---
+// UBO input parameters
 layout (binding = 0) uniform ParameterUBO {
     // Camera
     vec2        screenSize;
@@ -27,35 +92,21 @@ layout (binding = 0) uniform ParameterUBO {
     float           deltaTime;
 } ubo;
 
-layout(std140, binding = 1) readonly buffer ParticleSSBOIn {
-   Particle particlesIn[ ];
+// Spheres in and out
+layout(std140, binding = 1) readonly buffer SphereSSBOIn {
+   Sphere spheresIn[ ];
 };
 
-layout(std140, binding = 2) buffer ParticleSSBOOut {
-   Particle particlesOut[ ];
+layout(std140, binding = 2) buffer SphereSSBOOut {
+   Sphere spheresOut[ ];
 };
 
+// Output storage image
 layout (binding = 3, rgba8) writeonly uniform image2D image;
 
+// --- Program ---
 layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
-
-void main() 
-{
-    uint index = gl_GlobalInvocationID.x;
-
-    imageStore(image, ivec2(gl_GlobalInvocationID.xy), vec4( gl_GlobalInvocationID.x / 256.f, 0, 0, 1 ));
-
-    Particle particleIn = particlesIn[index];
-
-    particlesOut[index].position = particleIn.position + particleIn.velocity.xy * ubo.deltaTime;
-    particlesOut[index].velocity = particleIn.velocity;
-
-    // Flip movement at window border
-    if ((particlesOut[index].position.x <= -1.0) || (particlesOut[index].position.x >= 1.0)) {
-        particlesOut[index].velocity.x = -particlesOut[index].velocity.x;
-    }
-    if ((particlesOut[index].position.y <= -1.0) || (particlesOut[index].position.y >= 1.0)) {
-        particlesOut[index].velocity.y = -particlesOut[index].velocity.y;
-    }
-
+void main()  {
+    vec4 outColor = spheresIn[0].material.emissionColor;
+    imageStore(image, ivec2(gl_GlobalInvocationID.xy), outColor);
 }
