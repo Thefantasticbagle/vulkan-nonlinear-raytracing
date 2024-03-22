@@ -178,3 +178,56 @@ void inline createUniformBuffers(
 //    // (This is less efficient than using "push constants"
 //    memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
 //}
+
+/**
+ *  Creates a set of SSBOs with the given data.
+ */
+template <typename T>
+void inline createSSBO(
+    VkPhysicalDevice            physicalDevice,
+    VkDevice                    device,
+    VkCommandPool               commandPool,
+    VkQueue                     queue,
+    std::vector<T>              data,
+    std::vector<VkBuffer>       & buffer,
+    std::vector<VkDeviceMemory> & bufferMemory
+) {
+    VkDeviceSize bufferSize = sizeof(T) * data.size();
+
+    // Create staging buffer
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    createBuffer(
+        bufferSize,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        physicalDevice, device,
+        stagingBuffer, stagingBufferMemory
+    );
+
+    // Copy data to staging buffer
+    void* ptr;
+    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &ptr);
+    memcpy(ptr, data.data(), (size_t)bufferSize);
+    vkUnmapMemory(device, stagingBufferMemory);
+
+    // Create SSBOs and copy staging buffer to them
+    buffer.resize(MAX_FRAMES_IN_FLIGHT);
+    bufferMemory.resize(MAX_FRAMES_IN_FLIGHT);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        createBuffer(
+            bufferSize, 
+            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
+            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
+            physicalDevice, device,
+            buffer[i], bufferMemory[i]
+        );
+        copyBuffer(
+            stagingBuffer, buffer[i], bufferSize,
+            device, commandPool, queue );
+    }
+
+    // Cleanup
+    vkDestroyBuffer(device, stagingBuffer, nullptr);
+    vkFreeMemory(device, stagingBufferMemory, nullptr);
+}
