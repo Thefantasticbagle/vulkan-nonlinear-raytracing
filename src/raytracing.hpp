@@ -33,8 +33,7 @@ struct RTParams {
 /**
  *	Class for storing material settings.
  */
-class RTMaterial {
-public:
+struct RTMaterial {
 	alignas(16) glm::vec4
 		color,
 		emissionColor,

@@ -24,7 +24,6 @@
 const uint32_t  WIDTH = 800;
 const uint32_t  HEIGHT = 600;
 const int       MAX_FRAMES_IN_FLIGHT = 2;
-const uint32_t  PARTICLE_COUNT = WIDTH * HEIGHT;
 
 const std::vector<const char*> validationLayers = {
     "VK_LAYER_KHRONOS_validation"
@@ -115,6 +114,7 @@ struct SwapChainSupportDetails {
 class VulkanApplication {
 public:
     void run() {
+        // Set up vulkan context
         //listExtensions();
         initWindow();
         
@@ -137,6 +137,7 @@ public:
             findQueueFamilies(physicalDevice).graphicsAndComputeFamily.value(),
             commandPool );
 
+        // Create texture/image for framebuffer to sample from
         createTextureImage(
             static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height),
             device, physicalDevice, commandPool, graphicsQueue,
@@ -147,18 +148,26 @@ public:
             textureImageView );
         createTextureSampler(
             physicalDevice, device,
-            textureSampler );
+            textureSampler);
 
-        // Testing data
-        RTSphere s = RTSphere();
-        RTMaterial m = RTMaterial();
-        m.emissionColor = glm::vec4(0, 1, 1, 1);
-        s.material = m;
+        // Set up RTSpheres
+        std::vector<RTSphere> spheres {
+            RTSphere {
+                1.f,
+                glm::vec3(0,0,2),
+                RTMaterial {
+                    glm::vec4(1,0,0,1),
+                    glm::vec4(1,0,0,1),
+                    glm::vec4(1,0,0,1),
+                    1.f
+                }
+            }
+        };
 
         createSSBO(
             physicalDevice, device,
             commandPool, computeQueue,
-            std::vector<RTSphere>(PARTICLE_COUNT, s),
+            spheres,
             shaderStorageBuffers, shaderStorageBuffersMemory );
         createUniformBuffers<RTParams>(
             physicalDevice, device,
@@ -367,5 +376,43 @@ private:
 
         if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
             throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
+    }
+
+    /**
+     *  Updates the contents of the UBO for the given in-flight frame.
+     *  TODO: MAKE FUNCTIONAL
+     */
+    void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
+        RTCamera camera = RTCamera(
+            glm::zero<glm::vec3>(),
+            glm::zero<glm::vec3>(),
+            glm::vec2(static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height)),
+            1.f,
+            60.f,
+            1.f,
+            10.f
+        );
+
+        // Set up contents of UBO
+        RTParams ubo{};
+        ubo.screenSize = camera.screenSize;
+        ubo.fov = camera.fov;
+        ubo.focusDistance = camera.focusDistance;
+        ubo.cameraPos = camera.pos;
+        ubo.localToWorld = camera.rts;
+        ubo.frameNumber = 2;
+        
+        ubo.maxBounces = 10;
+        ubo.raysPerFrag = 3;
+        ubo.divergeStrength = 0.01f;
+        ubo.blackholePower = 1.f;
+        
+        ubo.spheresCount = 1;
+        ubo.blackholesCount = 1;
+        ubo.deltaTime = lastFrameTime * 2.f;
+
+        // Copy contents into buffer
+        // (This is less efficient than using "push constants"
+        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
     }
 };

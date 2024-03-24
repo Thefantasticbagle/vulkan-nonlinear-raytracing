@@ -165,21 +165,6 @@ void inline createUniformBuffers(
 }
 
 /**
- *  Updates the contents of the UBO for the given in-flight frame.
- */
-//void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
-//    // Set up contents of UBO
-//    RTParams ubo{};
-//    ubo.deltaTime = totalTime / 1000.f;
-//    //ubo.deltaTime = lastFrameTime * 2.f; // TODO: UNCOMMENT
-//    ubo.screenSize = glm::vec2(static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height));
-//
-//    // Copy contents into buffer
-//    // (This is less efficient than using "push constants"
-//    memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
-//}
-
-/**
  *  Creates a set of SSBOs with the given data.
  */
 template <typename T>
