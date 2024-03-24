@@ -33,9 +33,10 @@ const std::vector<const char*> deviceExtensions = {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME
 };
 
-const bool enableValidationLayers = true;
 #ifdef NDEBUG
-    enableValidationLayers = false;
+const bool enableValidationLayers = false;
+#else
+const bool enableValidationLayers = true;
 #endif
 
 // Functions loaded with ProcAddr
@@ -154,7 +155,7 @@ public:
         std::vector<RTSphere> spheres {
             RTSphere {
                 1.f,
-                glm::vec3(0,0,4),
+                glm::vec3(0,0,14),
                 RTMaterial {
                     glm::vec4(1,0,0,1),
                     glm::vec4(1,0,0,1),
@@ -173,7 +174,7 @@ public:
         std::vector<RTBlackhole> blackholes {
             RTBlackhole {
                 1.f,
-                glm::vec3(0, 0, 4),    
+                glm::vec3(0,0,6),    
             }
         };
 
@@ -209,7 +210,9 @@ public:
             drawFrame();
 
             float cameraRotationSpeed = 3.f;
+            float cameraSpeed = 3.f;
             glm::vec3 dtAng = glm::zero<glm::vec3>();
+            glm::vec3 dtPos = glm::zero<glm::vec3>();
             if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
                 dtAng.y += lastFrameTime * cameraRotationSpeed;
             }
@@ -222,10 +225,34 @@ public:
             if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
                 dtAng.x += lastFrameTime * cameraRotationSpeed;
             }
-            if (glm::length(dtAng) > 0.f) {
-                camera.ang += dtAng;
-                camera.calculateRTS();
+            if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS) {
+                printf("FPS = %i\n", (int)(1.f / lastFrameTime));
             }
+            if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
+                dtPos -= camera.left * lastFrameTime * cameraSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
+                dtPos += camera.left * lastFrameTime * cameraSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
+                dtPos += camera.front * lastFrameTime * cameraSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
+                dtPos -= camera.front * lastFrameTime * cameraSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+                dtPos += camera.up * lastFrameTime * cameraSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
+                dtPos -= camera.up * lastFrameTime * cameraSpeed;
+            }
+
+            if (glm::length(dtAng) > 0.f)
+                camera.ang += dtAng;
+            if (glm::length(dtPos) > 0.f)
+                camera.pos += dtPos;
+            if (glm::length(dtAng) > 0.f || glm::length(dtPos) > 0.f)
+                camera.calculateRTS();
 
             // Time
             double currentTime = glfwGetTime();
