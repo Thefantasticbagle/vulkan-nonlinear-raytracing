@@ -15,8 +15,11 @@ void VulkanApplication::cleanup() {
         vkDestroyBuffer(device, uniformBuffers[i], nullptr);
         vkFreeMemory(device, uniformBuffersMemory[i], nullptr);
 
-        vkDestroyBuffer(device, shaderStorageBuffers[i], nullptr);
-        vkFreeMemory(device, shaderStorageBuffersMemory[i], nullptr);
+        vkDestroyBuffer(device, spheresSSBO[i], nullptr);
+        vkFreeMemory(device, spheresSSBOMemory[i], nullptr);
+
+        vkDestroyBuffer(device, blackholesSSBO[i], nullptr);
+        vkFreeMemory(device, blackholesSSBOMemory[i], nullptr);
     }
     vkDestroyDescriptorPool(device, computeDescriptorPool, nullptr);
     vkDestroyDescriptorPool(device, graphicsDescriptorPool, nullptr);

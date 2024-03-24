@@ -109,7 +109,7 @@ void VulkanApplication::createComputeDescriptorSets() {
         descriptorWrites[0].pTexelBufferView = nullptr; // Optional
 
         VkDescriptorBufferInfo storageBufferInfoLastFrame{};
-        storageBufferInfoLastFrame.buffer = shaderStorageBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
+        storageBufferInfoLastFrame.buffer = spheresSSBO[i]; //shaderStorageBuffers[(i - 1) % MAX_FRAMES_IN_FLIGHT];
         storageBufferInfoLastFrame.offset = 0;
         storageBufferInfoLastFrame.range = sizeof(RTSphere) * 1;//PARTICLE_COUNT;
 
@@ -122,9 +122,9 @@ void VulkanApplication::createComputeDescriptorSets() {
         descriptorWrites[1].pBufferInfo = &storageBufferInfoLastFrame;
 
         VkDescriptorBufferInfo storageBufferInfoCurrentFrame{};
-        storageBufferInfoCurrentFrame.buffer = shaderStorageBuffers[i];
+        storageBufferInfoCurrentFrame.buffer = blackholesSSBO[i]; //shaderStorageBuffers[i];
         storageBufferInfoCurrentFrame.offset = 0;
-        storageBufferInfoCurrentFrame.range = sizeof(RTSphere) * 1;//PARTICLE_COUNT; TODO: MAKE MODULAR
+        storageBufferInfoCurrentFrame.range = sizeof(RTBlackhole) * 1; //sizeof(RTSphere) * 1;//PARTICLE_COUNT; TODO: MAKE MODULAR
 
         descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[2].dstSet = computeDescriptorSets[i];

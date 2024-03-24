@@ -56,6 +56,16 @@ public:
 };
 
 /**
+ *	Class for storing black hole information.
+ */
+struct RTBlackhole {
+	alignas(16) float
+		radius;
+	alignas(16) glm::vec3
+		center;
+};
+
+/**
  *	Class for storing and calculating camera information.
  */
 class RTCamera {

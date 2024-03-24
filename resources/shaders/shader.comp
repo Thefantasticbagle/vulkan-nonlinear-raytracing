@@ -7,7 +7,7 @@
 const float PI = radians(180);
 const bool  CULL_FACE = true;
 const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
-const int   RAY_SUBDIVISIONS = 25;
+const int   RAY_SUBDIVISIONS = 20;
 const float RAY_STEP_RANDOMNESS = 0.025;
 
 const float kEpsilion = 0.001; // Rename to K_EPSILION?
@@ -97,8 +97,8 @@ layout(std140, binding = 1) readonly buffer SphereSSBOIn {
    Sphere spheresIn[ ];
 };
 
-layout(std140, binding = 2) buffer SphereSSBOOut {
-   Sphere spheresOut[ ];
+layout(std140, binding = 2) readonly buffer BlackholeSSBOIn {
+   Blackhole blackholesIn [ ];
 };
 
 // Output storage image
@@ -308,21 +308,16 @@ bool RayBoundingBox(Ray ray, vec3 boxMin, vec3 boxMax) {
 }
 
 // --- Raytracing functions ---
-/**
- * Gets the first intersection which the ray might make.
- *
- * @param ray The ray.
- * @return The hit information from the (possible) intersection.
- */
-HitInfo CalculateRayCollision(Ray ray) {
+HitInfo CalculateRayCollision(Ray ray, float stepDist) {
     HitInfo closestHit = HitInfo0;
     closestHit.dist = -1;
 
     // Raycast spheres
     for (int i = 0; i < ubo.spheresCount; i++) {
         Sphere sphere = spheresIn[i];
+
         HitInfo hitInfo = RaySphere(ray, sphere);
-        if (hitInfo.didHit && ( closestHit.dist < 0 || hitInfo.dist < closestHit.dist ) )
+        if (hitInfo.didHit && hitInfo.dist <= stepDist && ( closestHit.dist < 0 || hitInfo.dist < closestHit.dist ) )
         {
             closestHit = hitInfo;
             closestHit.material = sphere.material;
@@ -333,59 +328,105 @@ HitInfo CalculateRayCollision(Ray ray) {
     return closestHit;
 }
 
-void Bounce(inout Ray ray, inout vec3 incomingLight, inout vec3 rayColor, inout uint seed, float stepDist) {    
-    for (int i = 0; i < ubo.maxBounces; i++)
-    {
-        if (stepDist == 0.f) return;
-
-        HitInfo hitInfo = CalculateRayCollision(ray);
-        if ( hitInfo.didHit && (stepDist == -1.f || hitInfo.dist <= stepDist) )
-        {
-            if (stepDist != -1.f) stepDist = max( stepDist - hitInfo.dist, 0.f );
-            Material material = hitInfo.material;
-            
-            // Calculate new pos and dir
+void SampleLineSegment(inout Ray ray, inout float stepDist, inout vec3 incomingLight, inout vec3 rayColor, inout uint seed) {
+    while ( stepDist > 0.f ) {
+        // Check for ray intersection between current position and predicted
+        HitInfo hitInfo = CalculateRayCollision(ray, stepDist);
+        if ( hitInfo.didHit ) {
+            // Update stepdist and ray
+            stepDist -= hitInfo.dist;
             ray.origin = hitInfo.pos;
+            Material material = hitInfo.material;
 
             bool 	isSpecular  = material.specularColor.w >= randFloat(seed);
             vec3 	specularDir = reflect(ray.dir, hitInfo.normal),
                     diffuseDir  = normalize(hitInfo.normal + randVecNormDist(seed));
             ray.dir = normalize(mix(diffuseDir, specularDir, material.smoothness * int(isSpecular)));
 
-            // Update light and color
+            // Sample
             vec3 emittedLight = material.emissionColor.xyz * material.emissionColor.w;
             incomingLight += emittedLight * rayColor;
-            mix(vec4(1,0,0,1), vec4(0,0,1,1), int(isSpecular));
             rayColor *= mix(material.color, material.specularColor, int(isSpecular)).rgb;
 
             // Early exit if ray color ~= 0
             // (Use some randomness to avoid "artificial" look)
             float p = max(rayColor.r, max(rayColor.g, rayColor.b));
-            if (randFloat(seed) >= p) break;
+            if (randFloat(seed) >= p) {
+                ray.destroyed = true;
+                return;
+            }
             rayColor *= 1.0f / p;
-        } else 
-        {
-            // If the ray did not hit anything, sample color from environment and return
-            incomingLight += GetEnvironmentLight(ray) * rayColor * 0.03f * 10.f;
-            break;
+        } else {
+            stepDist -= stepDist;
         }
     }
 }
 
+float Sigmoid (float x) {
+
+	//return 1.0 / (1.0 + (exp(-(x * 14.0 - 7.0))));
+    return 1.0 / (1.0 + exp(-x)); 
+}
+
 /**
- * Traces a ray's path as it bounces around the scene, collecting hit information along the way.
- *
- * @param ray The ray.
- * @param seed The seed, which is changed after use.
- *
- * @return The end color of the ray.
+ *  Bends the light ray's direction and outputs the predicted step distance.
  */
+float BendLight(inout Ray ray, inout uint seed) {
+    for (int i = 0; i < ubo.blackholesCount; i++) {
+        Blackhole blackhole = blackholesIn[i];
+
+        // Get direction and distance to the black hole
+        vec3    dirToHole = blackhole.center - ray.origin;
+        float   dist = length( dirToHole ); dirToHole /= dist;
+        float   invDist = 1.f / dist;
+
+        // Destroy ray and return if it's too close to the black hole
+        if (dist < blackhole.radius) {
+            ray.destroyed = true;
+            return -1.f;
+        }
+
+        // Calculate forces
+        float   invDistSqr = invDist * invDist;
+        float   bendForce  = invDistSqr * ubo.blackholePower;
+        float   spinForce  = invDistSqr * 0.f; // TODO: Add spin as a black hole property
+        
+        // Calculate step distance
+        // (For now, this assumes only ONE black hole exists.)
+        float   randomFactor = mix( 1.0-RAY_STEP_RANDOMNESS, 1.0/(1.0-RAY_STEP_RANDOMNESS), randFloat(seed) );
+        float n = 2.f,
+              a = 100.f,
+              b = 0.5f;
+        float distFactor = 0.9f * Sigmoid(dist);
+        float   stepDist = 0.1f + randomFactor * distFactor;//dist * 0.5f * randomFactor;
+
+        // Change direction of lightray
+        ray.dir = normalize( ray.dir + dirToHole * bendForce * stepDist + cross( dirToHole, vec3(0,0,1) * spinForce * stepDist ) );
+        ray.origin += ray.dir * stepDist;
+
+        // FOR NOW; ONLY WORKS WITH ONE BLACK HOLE
+        return stepDist;
+    }
+}
+
 vec3 Trace(Ray ray, inout uint seed) {
     vec3 	incomingLight = vec3(0),
             rayColor = vec3(1);
+    
+    int rayDivision = 0;
+    while (rayDivision < RAY_SUBDIVISIONS && !ray.destroyed) {
+        rayDivision++;
 
-    Bounce( ray, incomingLight, rayColor, seed, -1.f );
+        // Create line segment from the current ray position to the predicted next one
+        float stepDist = BendLight(ray, seed);
+        SampleLineSegment(ray, stepDist, incomingLight, rayColor, seed);
+    }
 
+    // If the ray was not destroyed but instead went out into space, sample enironment color
+    if (!ray.destroyed)
+        incomingLight += GetEnvironmentLight(ray) * rayColor * 0.3f; //* 0.03f;
+
+    // (Return)
     return incomingLight;
 }
 

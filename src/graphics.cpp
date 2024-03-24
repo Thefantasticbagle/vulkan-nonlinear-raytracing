@@ -424,8 +424,8 @@ void VulkanApplication::recordGraphicsCommandBuffer(VkCommandBuffer commandBuffe
     scissor.extent = swapChainExtent;
     vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-    VkDeviceSize offsets[] = { 0 };
-    vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
+    //VkDeviceSize offsets[] = { 0 };
+    //vkCmdBindVertexBuffers(commandBuffer, 0, 1, &shaderStorageBuffers[currentFrame], offsets);
 
     // Draw
     vkCmdDraw(commandBuffer, 6, 1, 0, 0);

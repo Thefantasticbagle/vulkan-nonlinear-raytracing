@@ -154,7 +154,7 @@ public:
         std::vector<RTSphere> spheres {
             RTSphere {
                 1.f,
-                glm::vec3(0,0,2),
+                glm::vec3(0,0,4),
                 RTMaterial {
                     glm::vec4(1,0,0,1),
                     glm::vec4(1,0,0,1),
@@ -168,7 +168,21 @@ public:
             physicalDevice, device,
             commandPool, computeQueue,
             spheres,
-            shaderStorageBuffers, shaderStorageBuffersMemory );
+            spheresSSBO, spheresSSBOMemory);
+
+        std::vector<RTBlackhole> blackholes {
+            RTBlackhole {
+                1.f,
+                glm::vec3(0, 0, 4),    
+            }
+        };
+
+        createSSBO(
+            physicalDevice, device,
+            commandPool, computeQueue,
+            blackholes,
+            blackholesSSBO, blackholesSSBOMemory);
+
         createUniformBuffers<RTParams>(
             physicalDevice, device,
             uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
@@ -194,9 +208,28 @@ public:
             glfwPollEvents();
             drawFrame();
 
+            float cameraRotationSpeed = 3.f;
+            glm::vec3 dtAng = glm::zero<glm::vec3>();
+            if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+                dtAng.y += lastFrameTime * cameraRotationSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+                dtAng.y -= lastFrameTime * cameraRotationSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+                dtAng.x -= lastFrameTime * cameraRotationSpeed;
+            }
+            if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+                dtAng.x += lastFrameTime * cameraRotationSpeed;
+            }
+            if (glm::length(dtAng) > 0.f) {
+                camera.ang += dtAng;
+                camera.calculateRTS();
+            }
+
             // Time
             double currentTime = glfwGetTime();
-            lastFrameTime = (currentTime - lastTime) * 1000.0;
+            lastFrameTime = currentTime - lastTime;
             lastTime = currentTime;
             totalTime += lastFrameTime;
         }
@@ -244,8 +277,10 @@ private:
     VkSampler       textureSampler;
 
     // SSBO
-    std::vector<VkBuffer>       shaderStorageBuffers;
-    std::vector<VkDeviceMemory> shaderStorageBuffersMemory;
+    std::vector<VkBuffer>       spheresSSBO;
+    std::vector<VkDeviceMemory> spheresSSBOMemory;
+    std::vector<VkBuffer>       blackholesSSBO;
+    std::vector<VkDeviceMemory> blackholesSSBOMemory;
 
     // Uniform buffer
     std::vector<VkBuffer>       uniformBuffers;
@@ -281,6 +316,15 @@ private:
     float lastFrameTime = 0.0f;
     double lastTime = 0.0f;
     float totalTime = 0.f;
+    RTCamera camera = RTCamera(
+        glm::zero<glm::vec3>(),
+        glm::zero<glm::vec3>(),
+        glm::vec2(WIDTH, HEIGHT),//glm::vec2(static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height)),
+        1.f,
+        60.f,
+        1.f,
+        10.f
+    );
 
     // Functions
     void initWindow();
@@ -383,16 +427,6 @@ private:
      *  TODO: MAKE FUNCTIONAL
      */
     void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
-        RTCamera camera = RTCamera(
-            glm::zero<glm::vec3>(),
-            glm::zero<glm::vec3>(),
-            glm::vec2(static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height)),
-            1.f,
-            60.f,
-            1.f,
-            10.f
-        );
-
         // Set up contents of UBO
         RTParams ubo{};
         ubo.screenSize = camera.screenSize;
@@ -402,7 +436,7 @@ private:
         ubo.localToWorld = camera.rts;
         ubo.frameNumber = 2;
         
-        ubo.maxBounces = 10;
+        ubo.maxBounces = 3;
         ubo.raysPerFrag = 3;
         ubo.divergeStrength = 0.01f;
         ubo.blackholePower = 1.f;
