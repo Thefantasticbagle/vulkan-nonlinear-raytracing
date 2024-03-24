@@ -47,11 +47,24 @@ bool VulkanApplication::isDeviceSuitable(VkPhysicalDevice device) {
         swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
     }
 
+    // This should be put in some sort of vector at the top of the code, also, update the VkPhysicalDeviceFeatures struct.
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
+    bool isValid = indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 
-    // This should be put in some sort of vector at the top of the code, also, update the VkPhysicalDeviceFeatures struct.
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+    // (Also, for now, require that a DEDICATED GPU is used)
+    VkPhysicalDeviceProperties props;
+    vkGetPhysicalDeviceProperties(device, &props);
+    bool isDedicated = props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
+
+    printf("GPU with name ");
+    printf(props.deviceName);
+    if (isDedicated) printf(" is DEDICATED");
+    else printf(" is INTEGRATED");
+    if (isValid) printf(" and VALID.\n");
+    else printf(" and INVALID.\n");
+
+    return isValid && isDedicated;
 }
 
 /**

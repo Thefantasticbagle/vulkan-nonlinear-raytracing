@@ -394,11 +394,8 @@ float BendLight(inout Ray ray, inout uint seed) {
         // Calculate step distance
         // (For now, this assumes only ONE black hole exists.)
         float   randomFactor = mix( 1.0-RAY_STEP_RANDOMNESS, 1.0/(1.0-RAY_STEP_RANDOMNESS), randFloat(seed) );
-        float n = 2.f,
-              a = 100.f,
-              b = 0.5f;
-        float distFactor = 0.9f * Sigmoid(dist);
-        float   stepDist = 0.1f + randomFactor * distFactor;//dist * 0.5f * randomFactor;
+        float   distFactor = 0.9f * Sigmoid(dist);
+        float   stepDist = 0.1f + randomFactor * distFactor;
 
         // Change direction of lightray
         ray.dir = normalize( ray.dir + dirToHole * bendForce * stepDist + cross( dirToHole, vec3(0,0,1) * spinForce * stepDist ) );
@@ -419,15 +416,12 @@ vec3 Trace(Ray ray, inout uint seed) {
 
         // Create line segment from the current ray position to the predicted next one
         float stepDist = BendLight(ray, seed);
+        if (ray.destroyed) return vec3(0);
         SampleLineSegment(ray, stepDist, incomingLight, rayColor, seed);
     }
 
     // If the ray was not destroyed but instead went out into space, sample enironment color
-    if (!ray.destroyed)
-        incomingLight += GetEnvironmentLight(ray) * rayColor * 0.3f; //* 0.03f;
-
-    // (Return)
-    return incomingLight;
+    return incomingLight + GetEnvironmentLight(ray) * rayColor * 0.3f; //* 0.03f;
 }
 
 // --- Program ---

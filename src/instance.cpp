@@ -16,8 +16,8 @@ void VulkanApplication::createInstance() {
     appInfo.pApplicationName = "Vulkan-Compute";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
-    appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.engineVersion = VK_MAKE_VERSION(1, 3, 0);//VK_MAKE_VERSION(1, 0, 0);
+    appInfo.apiVersion = VK_API_VERSION_1_3; //VK_API_VERSION_1_0;
 
     // Tell Vulkan driver which global extensions/validation layer to use
     VkInstanceCreateInfo createInfo{};
