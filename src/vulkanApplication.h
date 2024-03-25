@@ -188,6 +188,9 @@ public:
             physicalDevice, device,
             uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
 
+        computePushConstantReference = &frame;
+        computePushConstantSize = sizeof(RTFrame);
+
         createComputeDescriptorPool();
         createFragmentDescriptorPool();
 
@@ -253,6 +256,10 @@ public:
                 camera.pos += dtPos;
             if (glm::length(dtAng) > 0.f || glm::length(dtPos) > 0.f)
                 camera.calculateRTS();
+
+            frame.cameraPos = camera.pos;
+            frame.localToWorld = camera.rts;
+            frame.frameNumber++;
 
             // Time
             double currentTime = glfwGetTime();
@@ -330,6 +337,8 @@ private:
     VkDescriptorPool                computeDescriptorPool;
     VkDescriptorSetLayout           computeDescriptorSetLayout;
     std::vector<VkDescriptorSet>    computeDescriptorSets;
+    void*                           computePushConstantReference = nullptr;
+    uint32_t                        computePushConstantSize = 0;
 
     // Synchronization
     std::vector<VkSemaphore>    imageAvailableSemaphores;
@@ -352,6 +361,11 @@ private:
         1.f,
         10.f
     );
+    RTFrame frame = RTFrame{
+        camera.pos,
+        camera.rts,
+        0
+    };
 
     // Functions
     void initWindow();
@@ -459,9 +473,6 @@ private:
         ubo.screenSize = camera.screenSize;
         ubo.fov = camera.fov;
         ubo.focusDistance = camera.focusDistance;
-        ubo.cameraPos = camera.pos;
-        ubo.localToWorld = camera.rts;
-        ubo.frameNumber = 2;
         
         ubo.maxBounces = 3;
         ubo.raysPerFrag = 3;
@@ -470,7 +481,6 @@ private:
         
         ubo.spheresCount = 1;
         ubo.blackholesCount = 1;
-        ubo.deltaTime = lastFrameTime * 2.f;
 
         // Copy contents into buffer
         // (This is less efficient than using "push constants"

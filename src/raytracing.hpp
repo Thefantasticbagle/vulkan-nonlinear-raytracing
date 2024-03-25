@@ -5,6 +5,15 @@
 
 #include <array>
 
+struct RTFrame {
+	alignas(16) glm::vec3
+		cameraPos;
+	alignas(16) glm::mat4
+		localToWorld;
+	alignas(16) int
+		frameNumber;
+};
+
 /**
  *  Struct containing parameters for UBO.
  *	Should match the one in the shaders.
@@ -14,9 +23,6 @@ struct RTParams {
     glm::vec2   screenSize;
     float       fov,
                 focusDistance;
-    glm::vec3   cameraPos;
-    alignas(16) glm::mat4 localToWorld;
-    int         frameNumber;
 
     // Raytracing settings
     unsigned int    maxBounces,
@@ -27,7 +33,6 @@ struct RTParams {
     // Other
     unsigned int    spheresCount,
                     blackholesCount;
-    float           deltaTime;
 };
 
 /**

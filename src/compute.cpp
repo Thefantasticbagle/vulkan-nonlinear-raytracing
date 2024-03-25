@@ -180,6 +180,14 @@ void VulkanApplication::createComputePipeline() {
 	pipelineLayoutInfo.setLayoutCount = 1;
 	pipelineLayoutInfo.pSetLayouts = &computeDescriptorSetLayout;
 
+    VkPushConstantRange computePushConstants = VkPushConstantRange{};
+    computePushConstants.offset = 0;
+    computePushConstants.size = computePushConstantSize;
+    computePushConstants.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+    pipelineLayoutInfo.pPushConstantRanges = &computePushConstants;
+    pipelineLayoutInfo.pushConstantRangeCount = 1;
+
 	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS)
 		throw std::runtime_error("ERR::VULKAN::CREATE_COMPUTE_PIPELINE::PIPELINE_LAYOUT_CREATION_FAILED");
 
@@ -215,6 +223,9 @@ void VulkanApplication::recordComputeCommandBuffer(VkCommandBuffer commandBuffer
     // Bind pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
     vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeDescriptorSets[currentFrame], 0, nullptr);
+
+    // TODO: MAKE THIS MODULAR INSTEAD OF FORCED STATIC CAST
+    vkCmdPushConstants(commandBuffer, computePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, computePushConstantSize, (RTFrame*)computePushConstantReference);
 
     // Dispatch and commit
     //vkCmdDispatch(commandBuffer, static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height), 1); // TODO: ADD PARTICLE_COUNT VARIABLE

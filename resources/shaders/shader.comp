@@ -70,15 +70,18 @@ struct Ray {
 };
 
 // --- Input/Output ---
+layout (push_constant) uniform FrameUBO {
+    vec3    cameraPos;
+    mat4    localToWorld;
+    int     frameNumber;
+} frame;
+
 // UBO input parameters
 layout (binding = 0) uniform ParameterUBO {
     // Camera
     vec2        screenSize;
     float       fov,
                 focusDistance;
-    vec3        cameraPos;
-    mat4        localToWorld;
-    int         frameNumber;
 
     // Raytracing settings
     uint            maxBounces,
@@ -89,7 +92,6 @@ layout (binding = 0) uniform ParameterUBO {
     // Other
     uint            spheresCount,
                     blackholesCount;
-    float           deltaTime;
 } ubo;
 
 // Spheres in and out
@@ -433,7 +435,7 @@ void main()  {
     // Create seed for RNG
     vec2 uv = vec2( gl_GlobalInvocationID.x / ubo.screenSize.x, 1 - gl_GlobalInvocationID.y / ubo.screenSize.y );
     uint i = uint( gl_GlobalInvocationID.y * ubo.screenSize.x + gl_GlobalInvocationID.x );
-    uint seed = i + ubo.frameNumber * 719393;
+    uint seed = i + frame.frameNumber * 719393;
 
     // Calculate focus point
     float   planeHeight = ubo.focusDistance * tan(ubo.fov * 0.5 * PI / 180.0) * 2.0,
@@ -441,9 +443,9 @@ void main()  {
     vec3    viewParams = vec3( planeWidth, planeHeight, ubo.focusDistance );
 
     vec3    focusPointLocal = vec3(uv - 0.5, 1) * viewParams,
-            focusPoint = (ubo.localToWorld * vec4(focusPointLocal, 1)).xyz,
-            camUp = normalize(ubo.localToWorld[1].xyz),
-            camRight = normalize(ubo.localToWorld[0].xyz);
+            focusPoint = (frame.localToWorld * vec4(focusPointLocal, 1)).xyz,
+            camUp = normalize(frame.localToWorld[1].xyz),
+            camRight = normalize(frame.localToWorld[0].xyz);
 
     // Fire rays
     Ray ray;
@@ -456,7 +458,7 @@ void main()  {
         vec3 focusPointJittered = focusPoint + camRight*jitter.x + camUp*jitter.y;
 
         // Trace rays
-        ray.origin = ubo.cameraPos;
+        ray.origin = frame.cameraPos;
         ray.dir = normalize(focusPointJittered - ray.origin);
         totalIncomingLight += Trace(ray, seed);
     }
