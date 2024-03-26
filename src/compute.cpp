@@ -1,5 +1,133 @@
 #include "vulkanApplication.h"
 
+#include <iostream>
+
+struct UBOMemory {
+    std::vector<VkBuffer>       buffers;
+    std::vector<VkDeviceMemory> buffersMemory;
+    std::vector<void*>          buffersMapped;
+};
+
+struct VKLayout {
+    // Layout
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
+    std::vector<VkDescriptorPoolSize> poolSizes {};
+    std::array<std::vector<VkWriteDescriptorSet>, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)>  descriptorWrites {};
+
+    // Memory
+    std::vector<UBOMemory> uboMemories;
+
+    // Calculated properties
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    /**
+     *  Adds a pool size to poolSizes.
+     *  If the type already exists, increments its descriptorCount instead.
+     */
+    void addPoolSize( VkDescriptorType type ) {
+        for (auto poolSize : poolSizes)
+            if (poolSize.type == type) {
+                poolSize.descriptorCount += static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+                return;
+            }
+        poolSizes.push_back(
+            VkDescriptorPoolSize{ type, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) }
+        );
+    }
+
+    template<typename T>
+    void createUBO (
+        uint32_t binding,
+        VkShaderStageFlags stageFlags,
+        VkPhysicalDevice physicalDevice,
+        VkDevice device
+    ) {
+        // Create and push layout bindings
+        layoutBindings.push_back(
+            VkDescriptorSetLayoutBinding{ binding, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, stageFlags, nullptr }
+        );
+
+        // Add pool sizes
+        addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+        // Create buffers
+        UBOMemory uboMemory {};
+        createUniformBuffers<T>(
+            physicalDevice,
+            device,
+            uboMemory.buffers,
+            uboMemory.buffersMemory,
+            uboMemory.buffersMapped
+        );
+        uboMemories.push_back(uboMemory);
+
+        // Create and push descriptor writes
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            descriptorWrites[i].push_back(VkWriteDescriptorSet{
+                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                nullptr,
+                nullptr, // Is set later
+                binding,
+                0,
+                1,
+                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                nullptr,
+                VkDescriptorBufferInfo { uboMemory.buffers[i], 0, sizeof(T) },
+                nullptr
+                }
+            );
+        }
+    };
+
+    void createDescriptorSetLayout( VkDevice device ) {
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
+        layoutInfo.pBindings = layoutBindings.data();
+
+        if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
+    }
+
+    void createDescriptorPool( VkDevice device ) {
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+
+        if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_POOL::CREATION_FAILED");
+    }
+
+    void createDescriptorSets( VkDevice device ) {
+        // Prepare as many descriptor sets as there are frames-in-flight
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.pSetLayouts = layouts.data();
+
+        // Allocate the descriptors
+        // (these are automatically destroyed when pool is deleted)
+        // (Also, if createDescriptorPool is wrong, this might not give any warnings)
+        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        auto err = vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data());
+        if (err != VK_SUCCESS)
+            throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SETS::DESCRIPTOR_SETS_ALLOCATION_FAILED");
+    
+        // Update descriptor sets
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            for (VkWriteDescriptorSet w : descriptorWrites[i])
+                w.dstSet = descriptorSets[i];
+            vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites[i].size()), descriptorWrites[i].data(), 0, nullptr);
+        }
+    }
+};
+
 /**
  *  Creates the descriptor set for buffers.
  */
