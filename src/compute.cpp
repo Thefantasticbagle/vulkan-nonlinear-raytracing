@@ -2,12 +2,21 @@
 
 #include <iostream>
 
+/**
+ *  UBO memory fields.
+ */
 struct UBOMemory {
     std::vector<VkBuffer>       buffers;
     std::vector<VkDeviceMemory> buffersMemory;
     std::vector<void*>          buffersMapped;
 };
 
+/**
+ *  All layout-related information required for one pipeline.
+ * 
+ *  TODO: ADD SSBO AND STORAGE IMAGE
+ *  TODO: FIX CLEANUP
+ */
 struct VKLayout {
     // Layout
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
@@ -37,6 +46,15 @@ struct VKLayout {
         );
     }
 
+    /**
+     *  Creates and adds a Uniform Buffer Object to the layout.
+     *  Allocates memory and binds it to the appropriate fields in uboMemories.
+     * 
+     *  @param binding Binding, as in shader-code.
+     *  @param stageFlags Which stages the UBO should be visible to.
+     *  @param physicalDevice The Vulkan physical device.
+     *  @param device The Vulkan logical device.
+     */
     template<typename T>
     void createUBO (
         uint32_t binding,
@@ -65,22 +83,29 @@ struct VKLayout {
 
         // Create and push descriptor writes
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            descriptorWrites[i].push_back(VkWriteDescriptorSet{
-                VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                nullptr,
-                nullptr, // Is set later
-                binding,
-                0,
-                1,
-                VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                nullptr,
-                VkDescriptorBufferInfo { uboMemory.buffers[i], 0, sizeof(T) },
-                nullptr
-                }
-            );
+            VkDescriptorBufferInfo *bufferInfo = new VkDescriptorBufferInfo {};
+            bufferInfo->buffer = uboMemory.buffers[i];
+            bufferInfo->offset = 0;
+            bufferInfo->range = sizeof(T);
+
+            VkWriteDescriptorSet write {};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstBinding = binding;
+            write.dstArrayElement = 0;
+            write.descriptorCount = 1;
+            write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            write.pBufferInfo = bufferInfo;
+            
+            descriptorWrites[i].push_back(write);
         }
     };
 
+    /**
+     *  Creates the Descriptor Set Layout for the layout.
+     *  This should be done only once.
+     * 
+     *  @param device The Vulkan logical device.
+     */
     void createDescriptorSetLayout( VkDevice device ) {
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -91,6 +116,12 @@ struct VKLayout {
             throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
     }
 
+    /**
+     *  Creates the Descriptor Pool for the layout.
+     *  This should be done only once.
+     * 
+     *  @param device The Vulkan logical device.
+     */
     void createDescriptorPool( VkDevice device ) {
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -102,6 +133,15 @@ struct VKLayout {
             throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_POOL::CREATION_FAILED");
     }
 
+    /**
+     *  Creates the Descriptor Sets for the layout.
+     *  This should only be done after the Descriptor Pool and Descriptor Set Layout has been created.
+     * 
+     *  @param device The Vulkan logical device.
+     *  
+     *  @see VKLayout::createDescriptorSetLayout(...)
+     *  @see VKLayout::createDescriptorPool(...)
+     */
     void createDescriptorSets( VkDevice device ) {
         // Prepare as many descriptor sets as there are frames-in-flight
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
@@ -121,9 +161,11 @@ struct VKLayout {
     
         // Update descriptor sets
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            for (VkWriteDescriptorSet w : descriptorWrites[i])
-                w.dstSet = descriptorSets[i];
+            for (size_t j = 0; j < descriptorWrites[i].size(); j++)
+                descriptorWrites[i][j].dstSet = descriptorSets[i];
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites[i].size()), descriptorWrites[i].data(), 0, nullptr);
+            for (size_t j = 0; j < descriptorWrites[i].size(); j++) // cleanup
+                delete descriptorWrites[i][j].pBufferInfo;
         }
     }
 };
