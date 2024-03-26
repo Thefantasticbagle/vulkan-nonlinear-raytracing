@@ -99,7 +99,7 @@ public:
     BufferBuilder(
         VkPhysicalDevice physicalDevice,
         VkDevice         device,
-        DeletionQueue    deletionQueue
+        DeletionQueue*   deletionQueue
     ) : physicalDevice(physicalDevice), device(device), deletionQueue(deletionQueue) {}
 
     /**
@@ -136,6 +136,12 @@ public:
             uboMemory.buffersMapped
         );
         uboMemories[binding] = uboMemory;
+        deletionQueue->addDeletor([=]() {
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                vkDestroyBuffer(device, uboMemory.buffers[i], nullptr);
+                vkFreeMemory(device, uboMemory.buffersMemory[i], nullptr);
+            }
+        });
 
         // Create and push descriptor writes
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -180,7 +186,7 @@ private:
     // Environment
     VkDevice device;
     VkPhysicalDevice physicalDevice;
-    DeletionQueue deletionQueue;
+    DeletionQueue* deletionQueue;
 
     // Descriptors
     std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
@@ -222,6 +228,10 @@ private:
 
         if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS)
             throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
+
+        deletionQueue->addDeletor([=]() {
+            vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+        });
     }
 
     /**
@@ -237,6 +247,10 @@ private:
 
         if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
             throw std::runtime_error("ERR::VULKAN::CREATE_DESCRIPTOR_POOL::CREATION_FAILED");
+        
+        deletionQueue->addDeletor([=]() {
+            vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+        });
     }
 
     /**
@@ -273,6 +287,7 @@ private:
         }
     }
 };
+
 
 /**
  *  Creates the descriptor set for buffers.
