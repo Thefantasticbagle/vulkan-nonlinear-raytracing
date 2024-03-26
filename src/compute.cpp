@@ -2,8 +2,31 @@
 
 #include <iostream>
 
+#include <deque>
+#include <functional>
+#include <map>
+
 /**
- *  UBO memory fields.
+ *  Struct for storing and flushing deletion functions (deletors).
+ */
+struct DeletionQueue {
+    std::deque<std::function<void()>> deletors;
+
+    void addDeletor( std::function<void()>&& deletor ) {
+        deletors.push_back(deletor);
+    }
+
+    void flush() {
+        for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
+            (*it)();
+    }
+};
+
+/**
+ *  Uniform Buffer Object memory fields.
+ * 
+ *  Note that with BufferBundle there should be no need to interact directly with this struct,
+ *  however, it is still exposed as the objects are fully compiled and already made up for.
  */
 struct UBOMemory {
     std::vector<VkBuffer>       buffers;
@@ -12,39 +35,72 @@ struct UBOMemory {
 };
 
 /**
- *  All layout-related information required for one pipeline.
- * 
- *  TODO: ADD SSBO AND STORAGE IMAGE
- *  TODO: FIX CLEANUP
+ *  A fully compiled bundle containing buffers and associated information/functions.
+ *  The deletion of said objects has already been queued by the builder.
+ *  
+ *  @see BufferBuilder
  */
-struct VKLayout {
-    // Layout
-    std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
-    std::vector<VkDescriptorPoolSize> poolSizes {};
-    std::array<std::vector<VkWriteDescriptorSet>, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)>  descriptorWrites {};
-
-    // Memory
-    std::vector<UBOMemory> uboMemories;
-
-    // Calculated properties
-    VkDescriptorSetLayout descriptorSetLayout;
-    VkDescriptorPool descriptorPool;
+struct BufferBundle {
+    // Descriptors
+    VkDescriptorSetLayout        descriptorSetLayout;
+    VkDescriptorPool             descriptorPool;
     std::vector<VkDescriptorSet> descriptorSets;
 
+    // Memory
+    std::map<uint32_t, UBOMemory> uboMemories;
+
     /**
-     *  Adds a pool size to poolSizes.
-     *  If the type already exists, increments its descriptorCount instead.
+     *  Updates the contents of a Uniform Buffer Object.
+     *  
+     *  @param binding Binding, as in shader-code.
+     *  @param data The new data.
+     *  @param frames Which frames to update for. If left blank or with only a single "-1", updates all frames.
      */
-    void addPoolSize( VkDescriptorType type ) {
-        for (auto poolSize : poolSizes)
-            if (poolSize.type == type) {
-                poolSize.descriptorCount += static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-                return;
-            }
-        poolSizes.push_back(
-            VkDescriptorPoolSize{ type, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) }
-        );
+    template<typename T>
+    void updateUBO(
+        uint32_t            binding,
+        T                   & data,
+        std::vector<int>    frames = std::vector<int> {-1}
+    ) {
+        // If the binding does not correspond to any known UBO, throw an error
+        if (uboMemories.find(binding) == uboMemories.end())
+            throw std::runtime_error("ERR::VULKAN::UPDATE_UBO::INVALID_BINDING");
+
+        // If no frames are selected for updating, return
+        if (frames.size() == 0)
+            return;
+
+        // If the only frame selected for updating is "-1", update all frames
+        if (frames.size() == 1 && frames[0] == -1) {
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+                memcpy(uboMemories[binding].buffersMapped[i], &data, sizeof(T));
+            return;
+        }
+
+        // Otherwise, update specified frames
+        for (auto i : frames) {
+            // (if frame-to-update is outside of bounds, throw an error)
+            if (i >= MAX_FRAMES_IN_FLIGHT)
+                throw std::runtime_error("ERR::VULKAN::UPDATE_UBO::INVALID_FRAME");
+            memcpy(uboMemories[binding].buffersMapped[i], &data, sizeof(T));
+        }
     }
+};
+
+/**
+ *  Class for creating and building buffer objects into a fully compiled BufferBundle.
+ *  Handles creation and deletion of said objects. Last step is always to build().
+ */
+class BufferBuilder {
+public:
+    /**
+     *  Constructor.
+     */
+    BufferBuilder(
+        VkPhysicalDevice physicalDevice,
+        VkDevice         device,
+        DeletionQueue    deletionQueue
+    ) : physicalDevice(physicalDevice), device(device), deletionQueue(deletionQueue) {}
 
     /**
      *  Creates and adds a Uniform Buffer Object to the layout.
@@ -54,13 +110,13 @@ struct VKLayout {
      *  @param stageFlags Which stages the UBO should be visible to.
      *  @param physicalDevice The Vulkan physical device.
      *  @param device The Vulkan logical device.
+     * 
+     *  @return itself, for functional purposes.
      */
     template<typename T>
-    void createUBO (
-        uint32_t binding,
-        VkShaderStageFlags stageFlags,
-        VkPhysicalDevice physicalDevice,
-        VkDevice device
+    BufferBuilder UBO (
+        uint32_t            binding,
+        VkShaderStageFlags  stageFlags
     ) {
         // Create and push layout bindings
         layoutBindings.push_back(
@@ -79,7 +135,7 @@ struct VKLayout {
             uboMemory.buffersMemory,
             uboMemory.buffersMapped
         );
-        uboMemories.push_back(uboMemory);
+        uboMemories[binding] = uboMemory;
 
         // Create and push descriptor writes
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -98,15 +154,67 @@ struct VKLayout {
             
             descriptorWrites[i].push_back(write);
         }
+
+        return *this;
     };
+
+    /**
+     *  Builds the Buffer Bundle and queues the deletion of created objects.
+     */
+    BufferBundle build() {
+        // Build
+        createDescriptorSetLayout();
+        createDescriptorPool();
+        createDescriptorSets();
+
+        // Make bundle and return
+        BufferBundle bundle{};
+        bundle.descriptorSetLayout = descriptorSetLayout;
+        bundle.descriptorPool = descriptorPool;
+        bundle.descriptorSets = descriptorSets;
+        bundle.uboMemories = uboMemories;
+        return bundle;
+    }
+
+private:
+    // Environment
+    VkDevice device;
+    VkPhysicalDevice physicalDevice;
+    DeletionQueue deletionQueue;
+
+    // Descriptors
+    std::vector<VkDescriptorSetLayoutBinding> layoutBindings {};
+    std::vector<VkDescriptorPoolSize> poolSizes {};
+    std::array<std::vector<VkWriteDescriptorSet>, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT)> descriptorWrites {};
+
+    // Memory
+    std::map<uint32_t, UBOMemory> uboMemories;
+
+    // Calculated properties
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    std::vector<VkDescriptorSet> descriptorSets;
+
+    /**
+     *  Adds a pool size to poolSizes.
+     *  If the type already exists, increments its descriptorCount instead.
+     */
+    void addPoolSize( VkDescriptorType type ) {
+        for (size_t i = 0; i < poolSizes.size(); i++)
+            if (poolSizes[i].type == type) {
+                poolSizes[i].descriptorCount += static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+                return;
+            }
+        poolSizes.push_back(
+            VkDescriptorPoolSize{ type, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) }
+        );
+    }
 
     /**
      *  Creates the Descriptor Set Layout for the layout.
      *  This should be done only once.
-     * 
-     *  @param device The Vulkan logical device.
      */
-    void createDescriptorSetLayout( VkDevice device ) {
+    void createDescriptorSetLayout() {
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
@@ -119,10 +227,8 @@ struct VKLayout {
     /**
      *  Creates the Descriptor Pool for the layout.
      *  This should be done only once.
-     * 
-     *  @param device The Vulkan logical device.
      */
-    void createDescriptorPool( VkDevice device ) {
+    void createDescriptorPool() {
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -136,13 +242,11 @@ struct VKLayout {
     /**
      *  Creates the Descriptor Sets for the layout.
      *  This should only be done after the Descriptor Pool and Descriptor Set Layout has been created.
-     * 
-     *  @param device The Vulkan logical device.
-     *  
+     *
      *  @see VKLayout::createDescriptorSetLayout(...)
      *  @see VKLayout::createDescriptorPool(...)
      */
-    void createDescriptorSets( VkDevice device ) {
+    void createDescriptorSets() {
         // Prepare as many descriptor sets as there are frames-in-flight
         std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
