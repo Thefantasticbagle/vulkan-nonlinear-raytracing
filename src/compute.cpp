@@ -127,15 +127,18 @@ public:
         addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
         // Create buffers
-        UBOMemory uboMemory {};
-        createUniformBuffers<T>(
+        Buffer ubo (
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            true,
+            std::vector<T>{},
             physicalDevice,
             device,
-            uboMemory.buffers,
-            uboMemory.buffersMemory,
-            uboMemory.buffersMapped
+            NULL,
+            NULL
         );
+        UBOMemory uboMemory { ubo.buffers, ubo.buffersMemory, ubo.buffersMapped };
         uboMemories[binding] = uboMemory;
+
         deletionQueue->addDeletor([=]() {
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
                 vkDestroyBuffer(device, uboMemory.buffers[i], nullptr);

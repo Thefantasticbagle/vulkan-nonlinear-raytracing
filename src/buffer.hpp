@@ -127,7 +127,97 @@ void inline copyBuffer(
 }
 
 /**
+ *  Class for creating a buffer object, i.e. UBO or SSBO.
+ *  Does NOT handle the deletion of its buffers and buffer memories.
+ */
+class Buffer {
+public:
+    // Exposed fields
+    std::vector<VkBuffer>       buffers;
+    std::vector<VkDeviceMemory> buffersMemory;
+    std::vector<void*>          buffersMapped;
+
+    /**
+     *  Complete constructor.
+     *  Allocates memory for the buffer and its fields, which are stored in the exposed fields.
+     * 
+     *  @param mainUsage The main usage of the buffer, i.e. VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT for Uniform Buffer Objects.
+     *  @param isMapped Whether the buffer should be consistently mapped and host visible.
+     *  @param initialData The initial data of the buffer, if any. For UBOs, the vector's first element is used.
+     *  @param physicalDevice The Vulkan physical device.
+     *  @param device The Vulkan logical device.
+     *  @param commandPool A command pool to pull commands from.
+     *  @param queue The queue to commit commands to.
+     */
+    template<typename T>
+    Buffer (
+        VkBufferUsageFlags  mainUsage,
+        bool                isMapped,
+        std::vector<T>      initialData,
+        VkPhysicalDevice    physicalDevice,
+        VkDevice            device,
+        VkCommandPool       commandPool,
+        VkQueue             queue
+    ) {
+        VkMemoryPropertyFlags   props = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        VkBufferUsageFlags      usage = mainUsage;
+        VkBuffer                stagingBuffer;
+        VkDeviceMemory          stagingBufferMemory;
+        VkDeviceSize            bufferSize = sizeof(T);
+
+        // If the buffer is mapped, make it host visible and coherent
+        if (isMapped) {
+            props = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            buffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
+        }
+        // If the buffer is not mapped and has initial data, stage it
+        else if (initialData.size() > 0) {
+            bufferSize *= initialData.size();
+            usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+            
+            // Create staging buffer
+            createBuffer(
+                bufferSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                physicalDevice, device,
+                stagingBuffer, stagingBufferMemory
+            );
+
+            // Copy data to staging buffer
+            void* ptr;
+            vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &ptr);
+            memcpy(ptr, initialData.data(), (size_t)bufferSize);
+            vkUnmapMemory(device, stagingBufferMemory);
+        }
+
+        // Create main buffers (and transfer data)
+        buffers.resize(MAX_FRAMES_IN_FLIGHT);
+        buffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            createBuffer( bufferSize, usage, props, physicalDevice, device, buffers[i], buffersMemory[i] );
+
+            if (isMapped)
+                vkMapMemory(device, buffersMemory[i], 0, bufferSize, 0, &buffersMapped[i]);
+
+            if (isMapped && initialData.size() > 0)
+                memcpy(buffersMapped[i], &initialData[0], sizeof(T));
+
+            if (!isMapped && initialData.size() > 0)
+                copyBuffer( stagingBuffer, buffers[i], bufferSize, device, commandPool, queue );
+        }
+
+        // Cleanup
+        if (!isMapped && initialData.size() > 0) {
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
+        }
+    }
+};
+
+/**
  *  Creates a uniform buffer object.
+ *  TODO: DELETE, DEPRECATED.
  *  
  *  @param physicalDevice The Vulkan physical device.
  *  @param device The Vulkan logical device.
@@ -143,29 +233,24 @@ void inline createUniformBuffers(
     std::vector<VkDeviceMemory> & buffersMemory,
     std::vector<void*>          & buffersMapped
 ) {
-    VkDeviceSize bufferSize = sizeof(T);
+    Buffer buffer(
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        true,
+        std::vector<T>{},
+        physicalDevice,
+        device,
+        NULL,
+        NULL
+    );
 
-    // Create space for buffers
-    buffers.resize(MAX_FRAMES_IN_FLIGHT);
-    buffersMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    buffersMapped.resize(MAX_FRAMES_IN_FLIGHT);
-
-    // Create and map buffers
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(
-            bufferSize,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-            physicalDevice, device,
-            buffers[i], buffersMemory[i]
-        );
-
-        vkMapMemory(device, buffersMemory[i], 0, bufferSize, 0, &buffersMapped[i]);
-    }
+    buffers = buffer.buffers;
+    buffersMemory = buffer.buffersMemory;
+    buffersMapped = buffer.buffersMapped;
 }
 
 /**
  *  Creates a set of SSBOs with the given data.
+ *  TODO: DELETE, DEPRECATED.
  */
 template <typename T>
 void inline createSSBO(
@@ -174,45 +259,19 @@ void inline createSSBO(
     VkCommandPool               commandPool,
     VkQueue                     queue,
     std::vector<T>              data,
-    std::vector<VkBuffer>       & buffer,
-    std::vector<VkDeviceMemory> & bufferMemory
+    std::vector<VkBuffer>       & buffers,
+    std::vector<VkDeviceMemory> & buffersMemory
 ) {
-    VkDeviceSize bufferSize = sizeof(T) * data.size();
-
-    // Create staging buffer
-    VkBuffer stagingBuffer;
-    VkDeviceMemory stagingBufferMemory;
-    createBuffer(
-        bufferSize,
-        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        physicalDevice, device,
-        stagingBuffer, stagingBufferMemory
+    Buffer buffer(
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        false,
+        data,
+        physicalDevice,
+        device,
+        commandPool,
+        queue
     );
 
-    // Copy data to staging buffer
-    void* ptr;
-    vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &ptr);
-    memcpy(ptr, data.data(), (size_t)bufferSize);
-    vkUnmapMemory(device, stagingBufferMemory);
-
-    // Create SSBOs and copy staging buffer to them
-    buffer.resize(MAX_FRAMES_IN_FLIGHT);
-    bufferMemory.resize(MAX_FRAMES_IN_FLIGHT);
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        createBuffer(
-            bufferSize, 
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT, 
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 
-            physicalDevice, device,
-            buffer[i], bufferMemory[i]
-        );
-        copyBuffer(
-            stagingBuffer, buffer[i], bufferSize,
-            device, commandPool, queue );
-    }
-
-    // Cleanup
-    vkDestroyBuffer(device, stagingBuffer, nullptr);
-    vkFreeMemory(device, stagingBufferMemory, nullptr);
+    buffers = buffer.buffers;
+    buffersMemory = buffer.buffersMemory;
 }
