@@ -9,6 +9,8 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
+#include "VulkanApplicationSettings.h"
+
 #include "raytracing.hpp"
 #include "buffer.hpp"
 #include "command.hpp"
@@ -18,20 +20,6 @@
 #include <vector>
 #include <optional>
 #include <fstream>
-#include <array>
-
-// Constants
-const uint32_t  WIDTH = 800;
-const uint32_t  HEIGHT = 600;
-const int       MAX_FRAMES_IN_FLIGHT = 2;
-
-const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
-};
-
-const std::vector<const char*> deviceExtensions = {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME
-};
 
 #ifdef NDEBUG
 const bool enableValidationLayers = false;
