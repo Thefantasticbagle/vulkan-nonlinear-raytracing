@@ -7,7 +7,7 @@
 const float PI = radians(180);
 const bool  CULL_FACE = true;
 const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
-const int   RAY_SUBDIVISIONS = 100;
+const int   RAY_SUBDIVISIONS = 20;
 const float RAY_STEP_RANDOMNESS = 0.025;
 
 const float kEpsilion = 0.001; // Rename to K_EPSILION?
@@ -359,15 +359,10 @@ void SampleLineSegment(inout Ray ray, inout float stepDist, inout vec3 incomingL
             }
             rayColor *= 1.0f / p;
         } else {
+            ray.origin += ray.dir * stepDist;
             stepDist -= stepDist;
         }
     }
-}
-
-float Sigmoid (float x) {
-
-	//return 1.0 / (1.0 + (exp(-(x * 14.0 - 7.0))));
-    return 1.0 / (1.0 + exp(-x)); 
 }
 
 /**
@@ -396,12 +391,11 @@ float BendLight(inout Ray ray, inout uint seed) {
         // Calculate step distance
         // (For now, this assumes only ONE black hole exists.)
         float   randomFactor = mix( 1.0-RAY_STEP_RANDOMNESS, 1.0/(1.0-RAY_STEP_RANDOMNESS), randFloat(seed) );
-        float   distFactor = 0.9f * Sigmoid(dist);
+        float   distFactor = 0.5f * dist;
         float   stepDist = 0.1f + randomFactor * distFactor;
 
         // Change direction of lightray
         ray.dir = normalize( ray.dir + dirToHole * bendForce * stepDist + cross( dirToHole, vec3(0,0,1) * spinForce * stepDist ) );
-        ray.origin += ray.dir * stepDist;
 
         // FOR NOW; ONLY WORKS WITH ONE BLACK HOLE
         return stepDist;
@@ -425,15 +419,12 @@ vec3 Trace(Ray ray, inout uint seed) {
 
     // If the ray was not destroyed but instead went out into space, sample enironment color
     if (ray.destroyed) return vec3(0);
-    return incomingLight + GetEnvironmentLight(ray) * rayColor * 0.3f; //* 0.03f;
+    return incomingLight + GetEnvironmentLight(ray) * rayColor * 0.3f;
 }
 
 // --- Program ---
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 void main()  {
-//    vec4 outColor = spheresIn[0].material.emissionColor;
-//    imageStore(image, ivec2(gl_GlobalInvocationID.xy), outColor);
-
     // Create seed for RNG
     vec2 uv = vec2( gl_GlobalInvocationID.x / ubo.screenSize.x, 1 - gl_GlobalInvocationID.y / ubo.screenSize.y );
     uint i = uint( gl_GlobalInvocationID.y * ubo.screenSize.x + gl_GlobalInvocationID.x );
