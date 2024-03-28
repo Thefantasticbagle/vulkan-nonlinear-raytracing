@@ -8,9 +8,6 @@ void VulkanApplication::drawFrame() {
     // Wait for previous compute iteration
     vkWaitForFences(device, 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
 
-    // Update UBO contents
-    updateUniformBuffer(currentFrame); // TODO: MAKE MODULAR
-
     // Reset fences before commiting new commands
     vkResetFences(device, 1, &computeInFlightFences[currentFrame]);
 

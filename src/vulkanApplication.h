@@ -129,10 +129,30 @@ public:
                 1.f,
                 glm::vec3(0,0,14),
                 RTMaterial {
-                    glm::vec4(1,0,0,1),
-                    glm::vec4(1,0,0,1),
-                    glm::vec4(1,0,0,1),
+                    glm::vec4(1,1,1,1),
+                    glm::vec4(1,1,1,0),
+                    glm::vec4(1,1,1,0.95f),
                     1.f
+                }
+            },
+            RTSphere {
+                100.f,
+                glm::vec3(0,0,-102),
+                RTMaterial {
+                    glm::vec4(0,1,0,1),
+                    glm::vec4(0,1,0,0.5f),
+                    glm::vec4(0,1,0,0.5f),
+                    0.5f
+                }
+            },
+            RTSphere {
+                100.f,
+                glm::vec3(0,-102,0),
+                RTMaterial {
+                    glm::vec4(1,1,1,1),
+                    glm::vec4(0,1,0,0.f),
+                    glm::vec4(0,1,0,0.f),
+                    0.f
                 }
             }
         };
@@ -145,9 +165,23 @@ public:
             }
         };
 
+        // Set up RTParams
+        RTParams ubo{};
+        ubo.screenSize = camera.screenSize;
+        ubo.fov = camera.fov;
+        ubo.focusDistance = camera.focusDistance;
+        
+        ubo.maxBounces = 3;
+        ubo.raysPerFrag = 3;
+        ubo.divergeStrength = 0.01f;
+        ubo.blackholePower = 1.f;
+        
+        ubo.spheresCount = spheres.size();
+        ubo.blackholesCount = blackholes.size();
+
         // Create buffers and layout
         computeBundle = BufferBuilder(physicalDevice, device, commandPool, computeQueue, &deletionQueue)
-            .UBO(0, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ RTParams{} })
+            .UBO(0, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ubo})
             .SSBO(1, VK_SHADER_STAGE_COMPUTE_BIT, spheres)
             .SSBO(2, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
             .genericImage(3, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, swapChainExtent.width, swapChainExtent.height)
@@ -398,28 +432,5 @@ private:
 
         if (vkAllocateCommandBuffers(device, &allocInfo, computeCommandBuffers.data()) != VK_SUCCESS)
             throw std::runtime_error("ERR::VULKAN::CREATE_COMMAND_BUFFERS::ALLOCATION_FAILED");
-    }
-
-    /**
-     *  Updates the contents of the UBO for the given in-flight frame.
-     *  TODO: MAKE FUNCTIONAL
-     */
-    void updateUniformBuffer(uint32_t currentImage) {
-        // Set up contents of UBO
-        RTParams ubo{};
-        ubo.screenSize = camera.screenSize;
-        ubo.fov = camera.fov;
-        ubo.focusDistance = camera.focusDistance;
-        
-        ubo.maxBounces = 3;
-        ubo.raysPerFrag = 3;
-        ubo.divergeStrength = 0.01f;
-        ubo.blackholePower = 1.f;
-        
-        ubo.spheresCount = 1;
-        ubo.blackholesCount = 1;
-
-        // Copy contents into buffer
-        computeBundle.updateBuffer(0, std::vector<RTParams>{ubo}, std::vector<int>{(int)currentImage});
     }
 };

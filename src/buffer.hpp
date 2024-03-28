@@ -49,11 +49,11 @@ struct BufferMemory {
  *  TODO: CHECK IF AN IMAGE IS REQUIRED FOR EACH IN-FLIGHT-FRAME¨.
  */
 struct ImageMemory {
-    VkImage         image;
-    VkImageView     imageView;
-    VkDeviceMemory  imageMemory;
-    VkSampler       sampler;
-    VkImageLayout   layout;
+    std::vector<VkImage>        image;
+    std::vector<VkImageView>    imageView;
+    std::vector<VkDeviceMemory> imageMemory;
+    std::vector<VkSampler>      sampler;
+    VkImageLayout               layout;
 };
 
 /**
@@ -341,7 +341,7 @@ public:
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::IMAGE_MUST_BE_SAMPLED_OR_STORAGE");
         if (existingImage == nullptr && (width == NULL || height == NULL))
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::IMAGE_NEITHER_EXISTING_OR_VALID_DIMENSIONS");
-        if (existingImage != nullptr && existingImage->sampler == NULL && sampled)
+        if (existingImage != nullptr && existingImage->sampler.size() == 0 && sampled)
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::ADDING_SAMPLERS_TO_EXISTING_IMAGES_NOT_SUPPORTED");
 
         // Create and push layout bindings
@@ -361,64 +361,71 @@ public:
             imageMemories[binding] = ImageMemory{};
             existingImage = &imageMemories[binding];
 
+            existingImage->image.resize(MAX_FRAMES_IN_FLIGHT);
+            existingImage->imageView.resize(MAX_FRAMES_IN_FLIGHT);
+            existingImage->imageMemory.resize(MAX_FRAMES_IN_FLIGHT);
+            existingImage->sampler.resize(MAX_FRAMES_IN_FLIGHT);
+
             //properties
             existingImage->layout = storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             VkImageUsageFlags usage = sampled ? (storage ? VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_SAMPLED_BIT) : VK_IMAGE_USAGE_STORAGE_BIT;
 
             //image
-            createImage (
-                width, height, 1,
-                VK_FORMAT_R8G8B8A8_UNORM,
-                VK_IMAGE_TILING_OPTIMAL,
-                usage,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                physicalDevice,
-                device,
-                existingImage->image,
-                existingImage->imageMemory
-            );
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                createImage (
+                    width, height, 1,
+                    VK_FORMAT_R8G8B8A8_UNORM,
+                    VK_IMAGE_TILING_OPTIMAL,
+                    usage,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                    physicalDevice,
+                    device,
+                    existingImage->image[i],
+                    existingImage->imageMemory[i]
+                );
 
-            //layout
-            transitionImageLayout (
-                existingImage->image,
-                VK_FORMAT_R8G8B8A8_UNORM,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                existingImage->layout,
-                1,
-                device,
-                commandPool,
-                queue
-            );
+                //layout
+                transitionImageLayout (
+                    existingImage->image[i],
+                    VK_FORMAT_R8G8B8A8_UNORM,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    existingImage->layout,
+                    1,
+                    device,
+                    commandPool,
+                    queue
+                );
 
-            //view
-            existingImage->imageView = createImageView (
-                existingImage->image,
-                VK_FORMAT_R8G8B8A8_UNORM,
-                VK_IMAGE_ASPECT_COLOR_BIT, 
-                1, 
-                device
-            );
+                //view
+                existingImage->imageView[i] = createImageView(
+                    existingImage->image[i],
+                    VK_FORMAT_R8G8B8A8_UNORM,
+                    VK_IMAGE_ASPECT_COLOR_BIT,
+                    1, 
+                    device
+                );
 
-            //sampler
-            if (sampled) createSampler(physicalDevice, device, existingImage->sampler);
+                //sampler
+                if (sampled) createSampler(physicalDevice, device, existingImage->sampler[i]);
 
-            //cleanup
-            // TODO: MOVE THIS INTO EACH OF THE CORRESPONDING CREATION FUNCTIONS
-            VkImageView imageView = existingImage->imageView;
-            VkImage image = existingImage->image;
-            VkDeviceMemory imageMemory = existingImage->imageMemory;
-            VkSampler sampler = existingImage->sampler;
+                //cleanup
+                // TODO: MOVE THIS INTO EACH OF THE CORRESPONDING CREATION FUNCTIONS
+                VkImageView imageView = existingImage->imageView[i];
+                VkImage image = existingImage->image[i];
+                VkDeviceMemory imageMemory = existingImage->imageMemory[i];
+                VkSampler sampler = existingImage->sampler[i];
 
-            deletionQueue->addDeletor([=]() {
-                vkDestroyImageView(device, imageView, nullptr);
-                vkDestroyImage(device, image, nullptr);
-                vkFreeMemory(device, imageMemory, nullptr);
-                vkDestroySampler(device, sampler, nullptr);
-            });
+                deletionQueue->addDeletor([=]() {
+                    vkDestroyImageView(device, imageView, nullptr);
+                    vkDestroyImage(device, image, nullptr);
+                    vkFreeMemory(device, imageMemory, nullptr);
+                    vkDestroySampler(device, sampler, nullptr);
+                });
+            }
         }
         // If the image already exists, verify and bind it
         else {
-            if (existingImage->imageView == NULL)
+            if (existingImage->imageView.size() == 0)
                 throw std::runtime_error("ERR::VULKAN::STORAGE_IMAGE::EXISTING_IMAGE_IS_INVALID");
             imageMemories[binding] = *existingImage;
         }
@@ -427,8 +434,8 @@ public:
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorImageInfo* imageInfo = new VkDescriptorImageInfo{};
             imageInfo->imageLayout = existingImage->layout;
-            imageInfo->imageView = existingImage->imageView;
-            imageInfo->sampler = existingImage->sampler;
+            imageInfo->imageView = existingImage->imageView[i];
+            imageInfo->sampler = existingImage->sampler[i];
 
             VkWriteDescriptorSet write {};
             write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

@@ -7,7 +7,7 @@
 const float PI = radians(180);
 const bool  CULL_FACE = true;
 const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
-const int   RAY_SUBDIVISIONS = 20;
+const int   RAY_SUBDIVISIONS = 100;
 const float RAY_STEP_RANDOMNESS = 0.025;
 
 const float kEpsilion = 0.001; // Rename to K_EPSILION?
@@ -413,16 +413,18 @@ vec3 Trace(Ray ray, inout uint seed) {
             rayColor = vec3(1);
     
     int rayDivision = 0;
-    while (rayDivision < RAY_SUBDIVISIONS && !ray.destroyed) {
+    while (rayDivision < RAY_SUBDIVISIONS) {
         rayDivision++;
 
         // Create line segment from the current ray position to the predicted next one
         float stepDist = BendLight(ray, seed);
-        if (ray.destroyed) return vec3(0);
+        if (ray.destroyed) break;
         SampleLineSegment(ray, stepDist, incomingLight, rayColor, seed);
+        if (ray.destroyed) break;
     }
 
     // If the ray was not destroyed but instead went out into space, sample enironment color
+    if (ray.destroyed) return vec3(0);
     return incomingLight + GetEnvironmentLight(ray) * rayColor * 0.3f; //* 0.03f;
 }
 
@@ -449,6 +451,7 @@ void main()  {
 
     // Fire rays
     Ray ray;
+    ray.destroyed = false;
     vec3 totalIncomingLight = vec3(0);
 
     for ( int i = 0; i < ubo.raysPerFrag; i++ )
