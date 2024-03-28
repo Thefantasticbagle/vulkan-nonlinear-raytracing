@@ -13,9 +13,6 @@
 
 #include "raytracing.hpp"
 #include "buffer.hpp"
-#include "command.hpp"
-#include "image.hpp"
-#include "texture.hpp"
 
 #include <vector>
 #include <optional>
@@ -126,19 +123,6 @@ public:
             findQueueFamilies(physicalDevice).graphicsAndComputeFamily.value(),
             commandPool );
 
-        // Create texture/image for framebuffer to sample from
-        createTextureImage(
-            static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height),
-            device, physicalDevice, commandPool, graphicsQueue,
-            textureImage, textureImageMemory );
-        createTextureImageView(
-            textureImage,
-            device,
-            textureImageView );
-        createTextureSampler(
-            physicalDevice, device,
-            textureSampler);
-
         // Set up RTSpheres
         std::vector<RTSphere> spheres {
             RTSphere {
@@ -153,12 +137,7 @@ public:
             }
         };
 
-        createSSBO(
-            physicalDevice, device,
-            commandPool, computeQueue,
-            spheres,
-            spheresSSBO, spheresSSBOMemory);
-
+        // Set up RTBlackholes
         std::vector<RTBlackhole> blackholes {
             RTBlackhole {
                 1.f,
@@ -166,27 +145,20 @@ public:
             }
         };
 
-        createSSBO(
-            physicalDevice, device,
-            commandPool, computeQueue,
-            blackholes,
-            blackholesSSBO, blackholesSSBOMemory);
+        // Create buffers and layout
+        computeBundle = BufferBuilder(physicalDevice, device, commandPool, computeQueue, &deletionQueue)
+            .UBO(0, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ RTParams{} })
+            .SSBO(1, VK_SHADER_STAGE_COMPUTE_BIT, spheres)
+            .SSBO(2, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
+            .genericImage(3, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, swapChainExtent.width, swapChainExtent.height)
+            .build();
 
-        createUniformBuffers<RTParams>(
-            physicalDevice, device,
-            uniformBuffers, uniformBuffersMemory, uniformBuffersMapped);
+        graphicsBundle = BufferBuilder(physicalDevice, device, commandPool, graphicsQueue, &deletionQueue)
+            .sampler(0, VK_SHADER_STAGE_FRAGMENT_BIT, &computeBundle.imageMemories[3])
+            .build();
 
         computePushConstantReference = &frame;
         computePushConstantSize = sizeof(RTFrame);
-
-        createComputeDescriptorPool();
-        createFragmentDescriptorPool();
-
-        createComputeDescriptorSetLayout();
-        createFragmentDescriptorSetLayout();
-        
-        createComputeDescriptorSets();
-        createFragmentDescriptorSets();
 
         createComputeCommandBuffers();
         createGraphicsCommandBuffers();
@@ -257,6 +229,8 @@ public:
         }
 
         vkDeviceWaitIdle(device);
+
+        deletionQueue.flush();
         cleanup();
     }
 
@@ -290,41 +264,22 @@ private:
     std::vector<VkFramebuffer> swapChainFramebuffers;
 
     // Global (Graphics + Compute)
-    VkCommandPool    commandPool;
+    VkCommandPool commandPool;
 
-    // Texture
-    VkImage         textureImage;
-    VkDeviceMemory  textureImageMemory;
-    VkImageView     textureImageView;
-    VkSampler       textureSampler;
-
-    // SSBO
-    std::vector<VkBuffer>       spheresSSBO;
-    std::vector<VkDeviceMemory> spheresSSBOMemory;
-    std::vector<VkBuffer>       blackholesSSBO;
-    std::vector<VkDeviceMemory> blackholesSSBOMemory;
-
-    // Uniform buffer
-    std::vector<VkBuffer>       uniformBuffers;
-    std::vector<VkDeviceMemory> uniformBuffersMemory;
-    std::vector<void*>          uniformBuffersMapped;
+    // Buffers and layout
+    BufferBundle computeBundle;
+    BufferBundle graphicsBundle;
 
     // Graphics
     VkRenderPass                    renderPass;
     VkPipelineLayout                graphicsPipelineLayout;
     VkPipeline                      graphicsPipeline;
     std::vector<VkCommandBuffer>    graphicsCommandBuffers;
-    VkDescriptorPool                graphicsDescriptorPool;
-    VkDescriptorSetLayout           fragmentDescriptorSetLayout;
-    std::vector<VkDescriptorSet>    fragmentDescriptorSets;
 
     // Compute
     VkPipelineLayout                computePipelineLayout;
     VkPipeline                      computePipeline;
     std::vector<VkCommandBuffer>    computeCommandBuffers;
-    VkDescriptorPool                computeDescriptorPool;
-    VkDescriptorSetLayout           computeDescriptorSetLayout;
-    std::vector<VkDescriptorSet>    computeDescriptorSets;
     void*                           computePushConstantReference = nullptr;
     uint32_t                        computePushConstantSize = 0;
 
@@ -354,6 +309,9 @@ private:
         camera.rts,
         0
     };
+
+    // Cleanup
+    DeletionQueue deletionQueue {};
 
     // Functions
     void initWindow();
@@ -388,19 +346,10 @@ private:
     void createImageViews();
     void createFramebuffers();
 
-    void createComputeDescriptorPool();
-    void createFragmentDescriptorPool();
-    void createComputeDescriptorSetLayout();
-    void createFragmentDescriptorSetLayout();
-    void createComputeDescriptorSets();
-    void createFragmentDescriptorSets();
-
     void createRenderPass();
     void createGraphicsPipeline();
     void createComputePipeline();
 
-    //void createGraphicsCommandBuffers();
-    //void createComputeCommandBuffers();
     void recordGraphicsCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void recordComputeCommandBuffer(VkCommandBuffer commandBuffer);
 
@@ -455,7 +404,7 @@ private:
      *  Updates the contents of the UBO for the given in-flight frame.
      *  TODO: MAKE FUNCTIONAL
      */
-    void VulkanApplication::updateUniformBuffer(uint32_t currentImage) {
+    void updateUniformBuffer(uint32_t currentImage) {
         // Set up contents of UBO
         RTParams ubo{};
         ubo.screenSize = camera.screenSize;
@@ -471,7 +420,6 @@ private:
         ubo.blackholesCount = 1;
 
         // Copy contents into buffer
-        // (This is less efficient than using "push constants"
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        computeBundle.updateBuffer(0, std::vector<RTParams>{ubo}, std::vector<int>{(int)currentImage});
     }
 };

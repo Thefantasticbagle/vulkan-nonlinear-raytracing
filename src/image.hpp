@@ -3,7 +3,8 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "buffer.hpp"
+#include "command.hpp"
+#include "memory.hpp"
 
 #include <stdexcept>
 
@@ -125,6 +126,42 @@ VkImageView inline createImageView(
     if (vkCreateImageView(device, &createInfo, nullptr, &imageView) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::CREATE_IMAGE_VIEW::CREATION_FAILED");
     return imageView;
+}
+
+/**
+ *  Creates the sampler for the texture.
+ */
+void inline createSampler (
+
+    VkPhysicalDevice    physicalDevice,
+    VkDevice            device,
+    VkSampler           & sampler
+) {
+    // Create sampler
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.minLod = 0.0f; // To see effects: try static_cast<float>(mipLevels / 2);
+    samplerInfo.maxLod = 1;
+    samplerInfo.mipLodBias = 0.0f; // Optional
+
+    //set up anisotropic filtering
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(physicalDevice, &properties);
+
+    samplerInfo.anisotropyEnable = VK_TRUE;
+    samplerInfo.maxAnisotropy = properties.limits.maxSamplerAnisotropy;
+
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK; // Color of outside of texture dimensions
+    samplerInfo.unnormalizedCoordinates = VK_FALSE; // True -> [0,width) and [0,height) instead of [0,1)
+
+    if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::CREATE_SAMPLER::CREATION_FAILED");
 }
 
 /**
