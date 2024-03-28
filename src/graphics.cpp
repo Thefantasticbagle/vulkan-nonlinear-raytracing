@@ -69,99 +69,6 @@ void VulkanApplication::createRenderPass() {
 }
 
 /**
- *  Creates the descriptor set for buffers.
- */
-void VulkanApplication::createFragmentDescriptorSetLayout() {
-    std::array<VkDescriptorSetLayoutBinding, 1> layoutBindings{};
-
-    layoutBindings[0].binding = 0;
-    layoutBindings[0].descriptorCount = 1;
-    layoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    layoutBindings[0].pImmutableSamplers = nullptr;
-    layoutBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(layoutBindings.size());
-    layoutInfo.pBindings = layoutBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &fragmentDescriptorSetLayout) != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::CREATE_GRAPHICS_DESCRIPTOR_SET_LAYOUT::CREATION_FAILED");
-}
-
-/**
-  *  Creates a pool that can allocate as many UBO descriptors as there are in-flight frames.
-  */
-void VulkanApplication::createFragmentDescriptorPool() {
-    // Create a pool which contains as many descriptors as there are in-flight frames
-    std::array<VkDescriptorPoolSize, 1> poolSizes{};
-
-    poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-    VkDescriptorPoolCreateInfo poolInfo{};
-    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
-    poolInfo.pPoolSizes = poolSizes.data();
-    /*
-        "Aside from the maximum number of individual descriptors that are available,
-        we also need to specify the maximum number of descriptor sets that may be allocated."'
-        ? what is the difference
-    */
-    poolInfo.maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-
-    if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &graphicsDescriptorPool) != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::CREATE_GRAPHICS_DESCRIPTOR_POOL::CREATION_FAILED");
-}
-
-/**
- *  Allocates UBO descriptors from the pool.
- */
-void VulkanApplication::createFragmentDescriptorSets() {
-    // Prepare as many descriptor sets as there are frames-in-flight
-    std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, fragmentDescriptorSetLayout);
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfo.descriptorPool = graphicsDescriptorPool;
-    allocInfo.descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
-    allocInfo.pSetLayouts = layouts.data();
-
-    // Allocate the descriptors
-    // (these are automatically destroyed when pool is deleted)
-    // (Also, if createDescriptorPool is wrong, this might not give any warnings)
-    fragmentDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-    auto err = vkAllocateDescriptorSets(device, &allocInfo, fragmentDescriptorSets.data());
-    if (err != VK_SUCCESS)
-        throw std::runtime_error("ERR::VULKAN::CREATE_FRAGMENT_DESCRIPTOR_SETS::DESCRIPTOR_SETS_ALLOCATION_FAILED");
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        // Configure descriptor writes
-        std::array<VkWriteDescriptorSet, 1> descriptorWrites{};
-
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        imageInfo.imageView = textureImageView;
-        imageInfo.sampler = textureSampler;
-
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = fragmentDescriptorSets[i];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].dstArrayElement = 0; // i = 0
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[0].descriptorCount = 1; // i = array.count()
-        descriptorWrites[0].pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
-    }
-
-    /*
-        Note: It is possible to have multiple descriptor sets, in that case use this to access them in shader:
-            layout(set = 0, binding = 0) uniform UniformBufferObject { ... }
-        One example of such a use is for different objects with completely different UBO fields.
-    */
-}
-
-/**
  *  Creates the graphics pipeline.
  *  Also sets up the Fixed-function state (input assembly, rasterizer, viewport, scissoring, color blending, etc.
  */
@@ -297,7 +204,7 @@ void VulkanApplication::createGraphicsPipeline() {
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &fragmentDescriptorSetLayout; // Why can we use multiple layout descriptors??
+    pipelineLayoutInfo.pSetLayouts = &graphicsBundle.descriptorSetLayout;
     pipelineLayoutInfo.pushConstantRangeCount = 0; // Optional
     pipelineLayoutInfo.pPushConstantRanges = nullptr; // Optional
 
@@ -408,7 +315,7 @@ void VulkanApplication::recordGraphicsCommandBuffer(VkCommandBuffer commandBuffe
 
     // Bind pipeline
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelineLayout, 0, 1, &fragmentDescriptorSets[currentFrame], 0, nullptr);
+    vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipelineLayout, 0, 1, &graphicsBundle.descriptorSets[currentFrame], 0, nullptr);
 
     VkViewport viewport{};
     viewport.x = 0.0f;
