@@ -11,7 +11,8 @@
 
 #include "VulkanApplicationSettings.h"
 
-#include "raytracing.hpp"
+#include "camera.hpp"
+#include "glsl_cpp_common.h"
 #include "buffer.hpp"
 
 #include <vector>
@@ -181,10 +182,10 @@ public:
 
         // Create buffers and layout
         computeBundle = BufferBuilder(physicalDevice, device, commandPool, computeQueue, &deletionQueue)
-            .UBO(0, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ubo})
-            .SSBO(1, VK_SHADER_STAGE_COMPUTE_BIT, spheres)
-            .SSBO(2, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
-            .genericImage(3, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, swapChainExtent.width, swapChainExtent.height)
+            .UBO(b_params, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ubo})
+            .SSBO(b_spheres, VK_SHADER_STAGE_COMPUTE_BIT, spheres)
+            .SSBO(b_blackholes, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
+            .genericImage(b_image, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, swapChainExtent.width, swapChainExtent.height)
             .build();
 
         graphicsBundle = BufferBuilder(physicalDevice, device, commandPool, graphicsQueue, &deletionQueue)
@@ -329,7 +330,7 @@ private:
     float lastFrameTime = 0.0f;
     double lastTime = 0.0f;
     float totalTime = 0.f;
-    RTCamera camera = RTCamera(
+    Camera camera = Camera(
         glm::zero<glm::vec3>(),
         glm::zero<glm::vec3>(),
         glm::vec2(WIDTH, HEIGHT),//glm::vec2(static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height)),

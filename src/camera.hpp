@@ -3,79 +3,12 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/ext.hpp"
 
-#include <array>
-
-struct RTFrame {
-	alignas(16) glm::vec3
-		cameraPos;
-	alignas(16) glm::mat4
-		localToWorld;
-	alignas(16) int
-		frameNumber;
-};
-
-/**
- *  Struct containing parameters for UBO.
- *	Should match the one in the shaders.
- */
-struct RTParams {
-    // Camera
-    glm::vec2   screenSize;
-    float       fov,
-                focusDistance;
-
-    // Raytracing settings
-    unsigned int    maxBounces,
-                    raysPerFrag;
-    float           divergeStrength,
-                    blackholePower;
-
-    // Other
-    unsigned int    spheresCount,
-                    blackholesCount;
-};
-
-/**
- *	Class for storing material settings.
- */
-struct RTMaterial {
-	alignas(16) glm::vec4
-		color,
-		emissionColor,
-		specularColor;
-	alignas(16) float
-		smoothness;
-};
-
-/**
- *	Class for storing sphere information.
- */
-class RTSphere {
-public:
-	alignas(16) float
-		radius;
-	alignas(16) glm::vec3
-		center;
-	alignas(16) RTMaterial
-		material;
-};
-
-/**
- *	Class for storing black hole information.
- */
-struct RTBlackhole {
-	alignas(16) float
-		radius;
-	alignas(16) glm::vec3
-		center;
-};
-
 /**
  *	Class for storing and calculating camera information.
  */
-class RTCamera {
+class Camera {
 public:
-	RTCamera(glm::vec3 position, glm::vec3 angle, glm::vec2 screenSize, float focusDistance, float fov, float zNear, float zFar)
+	Camera(glm::vec3 position, glm::vec3 angle, glm::vec2 screenSize, float focusDistance, float fov, float zNear, float zFar)
 		: pos(position), ang(angle), screenSize(screenSize), focusDistance(focusDistance), fov(fov), zNear(zNear), zFar(zFar) {
 		calculateRTS();
 	}
