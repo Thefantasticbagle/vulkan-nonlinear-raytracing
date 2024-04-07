@@ -29,7 +29,8 @@ START_BINDING( ComputeBindings )
 	b_params		= 0,
 	b_spheres		= 1,
 	b_blackholes	= 2,
-	b_image			= 3
+	b_image			= 3,
+	b_skybox		= 4
 END_BINDING();
 
 // --- Structs

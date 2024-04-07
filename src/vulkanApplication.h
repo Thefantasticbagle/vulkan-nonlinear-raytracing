@@ -137,18 +137,18 @@ public:
                 }
             },
             RTSphere {
-                100.f,
-                glm::vec3(0,0,-102),
+                10.f,
+                glm::vec3(0,5,-16),
                 RTMaterial {
-                    glm::vec4(0,1,0,1),
-                    glm::vec4(0,1,0,0.5f),
-                    glm::vec4(0,1,0,0.5f),
+                    glm::vec4(1,0.3,0,1),
+                    glm::vec4(1,0.3,0,0.5f),
+                    glm::vec4(1,1,1,0.0f),
                     0.5f
                 }
             },
             RTSphere {
                 100.f,
-                glm::vec3(0,-102,0),
+                glm::vec3(0,-100,0),
                 RTMaterial {
                     glm::vec4(1,1,1,1),
                     glm::vec4(0,1,0,0.f),
@@ -162,7 +162,7 @@ public:
         std::vector<RTBlackhole> blackholes {
             RTBlackhole {
                 1.f,
-                glm::vec3(0,0,6),    
+                glm::vec3(0,1,6),
             }
         };
 
@@ -173,8 +173,8 @@ public:
         ubo.focusDistance = camera.focusDistance;
         
         ubo.maxBounces = 3;
-        ubo.raysPerFrag = 3;
-        ubo.divergeStrength = 0.01f;
+        ubo.raysPerFrag = 12;
+        ubo.divergeStrength = 0.025f;
         ubo.blackholePower = 1.f;
         
         ubo.spheresCount = spheres.size();
@@ -185,11 +185,12 @@ public:
             .UBO(b_params, VK_SHADER_STAGE_COMPUTE_BIT, std::vector<RTParams>{ubo})
             .SSBO(b_spheres, VK_SHADER_STAGE_COMPUTE_BIT, spheres)
             .SSBO(b_blackholes, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
-            .genericImage(b_image, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, swapChainExtent.width, swapChainExtent.height)
+            .genericImage(b_image, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, nullptr, swapChainExtent.width, swapChainExtent.height)
+            .sampler(b_skybox, VK_SHADER_STAGE_COMPUTE_BIT, "../resources/textures/texture.jpg")
             .build();
 
         graphicsBundle = BufferBuilder(physicalDevice, device, commandPool, graphicsQueue, &deletionQueue)
-            .sampler(0, VK_SHADER_STAGE_FRAGMENT_BIT, &computeBundle.imageMemories[3])
+            .sampler(0, VK_SHADER_STAGE_FRAGMENT_BIT, nullptr, &computeBundle.imageMemories[b_image])
             .build();
 
         computePushConstantReference = &frame;

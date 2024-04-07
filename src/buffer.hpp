@@ -2,6 +2,7 @@
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <stb_image.h>
 
 #include "VulkanApplicationSettings.h"
 #include "command.hpp"
@@ -53,7 +54,7 @@ struct ImageMemory {
     std::vector<VkImageView>    imageView;
     std::vector<VkDeviceMemory> imageMemory;
     std::vector<VkSampler>      sampler;
-    VkImageLayout               layout;
+    std::vector<VkImageLayout>  layout;
 };
 
 /**
@@ -265,6 +266,7 @@ public:
     BufferBuilder sampler (
         uint32_t            binding,
         VkShaderStageFlags  stageFlags,
+        char*               filePath = nullptr,
         ImageMemory*        existingImage = nullptr,
         uint32_t            width = NULL,
         uint32_t            height = NULL
@@ -275,6 +277,7 @@ public:
             VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
             true,
             false,
+            filePath,
             existingImage,
             width,
             height
@@ -305,6 +308,7 @@ public:
             VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
             false,
             true,
+            nullptr,
             existingImage,
             width,
             height
@@ -332,6 +336,7 @@ public:
         VkDescriptorType    type,
         bool                sampled,
         bool                storage,
+        char*               filePath = nullptr,
         ImageMemory*        existingImage = nullptr,
         uint32_t            width = NULL,
         uint32_t            height = NULL
@@ -339,7 +344,7 @@ public:
         // Early error handling
         if (!sampled && !storage)
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::IMAGE_MUST_BE_SAMPLED_OR_STORAGE");
-        if (existingImage == nullptr && (width == NULL || height == NULL))
+        if (existingImage == nullptr && filePath == nullptr && (width == NULL || height == NULL))
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::IMAGE_NEITHER_EXISTING_OR_VALID_DIMENSIONS");
         if (existingImage != nullptr && existingImage->sampler.size() == 0 && sampled)
             throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::ADDING_SAMPLERS_TO_EXISTING_IMAGES_NOT_SUPPORTED");
@@ -356,6 +361,37 @@ public:
         // Add pool sizes
         addPoolSize(type);
 
+        // If the image should be loaded from path...
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        int texWidth, texHeight, texChannels;
+        if (filePath != nullptr) {
+            // Load image from file
+            stbi_uc* pixels = stbi_load(filePath, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+            VkDeviceSize imageSize = texWidth * texHeight * 4;
+            width = texWidth; height = texHeight;
+            if (!pixels)
+                throw std::runtime_error("ERR::VULKAN::GENERIC_IMAGE::STBI_LOAD_FAILURE");
+
+            // Create staging buffer and transfer data
+            createBuffer(
+                imageSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                physicalDevice,
+                device,
+                stagingBuffer,
+                stagingBufferMemory
+            );
+
+            void* data;
+            vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data);
+            memcpy(data, pixels, static_cast<size_t>(imageSize));
+            vkUnmapMemory(device, stagingBufferMemory);
+
+            stbi_image_free(pixels);
+        }
+
         // If image does not exist, create it
         if (existingImage == nullptr) {
             imageMemories[binding] = ImageMemory{};
@@ -365,13 +401,16 @@ public:
             existingImage->imageView.resize(MAX_FRAMES_IN_FLIGHT);
             existingImage->imageMemory.resize(MAX_FRAMES_IN_FLIGHT);
             existingImage->sampler.resize(MAX_FRAMES_IN_FLIGHT);
+            existingImage->layout.resize(MAX_FRAMES_IN_FLIGHT);
 
             //properties
-            existingImage->layout = storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            //existingImage->layout = storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             VkImageUsageFlags usage = sampled ? (storage ? VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT : VK_IMAGE_USAGE_SAMPLED_BIT) : VK_IMAGE_USAGE_STORAGE_BIT;
+            if (filePath != nullptr) usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
             //image
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                existingImage->layout[i] = filePath != nullptr ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : (storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 createImage (
                     width, height, 1,
                     VK_FORMAT_R8G8B8A8_UNORM,
@@ -389,12 +428,29 @@ public:
                     existingImage->image[i],
                     VK_FORMAT_R8G8B8A8_UNORM,
                     VK_IMAGE_LAYOUT_UNDEFINED,
-                    existingImage->layout,
+                    existingImage->layout[i],
                     1,
                     device,
                     commandPool,
                     queue
                 );
+
+                if (filePath != nullptr) {
+                    copyBufferToImage(stagingBuffer, existingImage->image[i], static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight), device, commandPool, queue);
+
+                    auto newLayout = storage ? VK_IMAGE_LAYOUT_GENERAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                    transitionImageLayout(
+                        existingImage->image[i],
+                        VK_FORMAT_R8G8B8A8_UNORM,
+                        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                        newLayout,
+                        1,
+                        device,
+                        commandPool,
+                        queue
+                    );
+                    existingImage->layout[i] = newLayout;
+                }
 
                 //view
                 existingImage->imageView[i] = createImageView(
@@ -433,7 +489,7 @@ public:
         // Create and push descriptor writes
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorImageInfo* imageInfo = new VkDescriptorImageInfo{};
-            imageInfo->imageLayout = existingImage->layout;
+            imageInfo->imageLayout = existingImage->layout[i];
             imageInfo->imageView = existingImage->imageView[i];
             imageInfo->sampler = existingImage->sampler[i];
 
@@ -446,6 +502,12 @@ public:
             write.pImageInfo = imageInfo;
             
             descriptorWrites[i].push_back(write);
+        }
+
+        // Cleanup staging buffer
+        if (filePath != nullptr) {
+            vkDestroyBuffer(device, stagingBuffer, nullptr);
+            vkFreeMemory(device, stagingBufferMemory, nullptr);
         }
 
         return *this;

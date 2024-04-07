@@ -214,3 +214,56 @@ void inline copyBuffer(
 
     endSingleTimeCommands(commandBuffer, commandPool, device, queue);
 }
+
+/**
+ *  Copies a buffer to an image.
+ *
+ *  @param buffer The buffer to copy from.
+ *  @param image The image to copy to.
+ *  @param width Width of the image region to copy to.
+ *  @param height Height of the image region to copy to.
+ *  @param device The Vulkan logical device.
+ *  @param commandPool The command pool to use.
+ *  @param queue The queue to copy-command with.
+ */
+void inline copyBufferToImage(
+    VkBuffer        buffer,
+    VkImage         & image,
+    uint32_t        width,
+    uint32_t        height,
+    VkDevice        device,
+    VkCommandPool   commandPool,
+    VkQueue         queue
+) {
+    VkCommandBuffer commandBuffer = beginSingleTimeCommands(device, commandPool);
+
+    // Define which regions map to where
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+
+    region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    region.imageSubresource.mipLevel = 0;
+    region.imageSubresource.baseArrayLayer = 0;
+    region.imageSubresource.layerCount = 1;
+
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = {
+        width,
+        height,
+        1
+    };
+
+    // Copy buffer to image
+    vkCmdCopyBufferToImage(
+        commandBuffer,
+        buffer,
+        image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, // Assumes that the image has already been transitioned to the optimal pixel-copying format
+        1,
+        &region
+    );
+
+    endSingleTimeCommands(commandBuffer, commandPool, device, queue);
+}
