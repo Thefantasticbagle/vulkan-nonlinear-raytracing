@@ -163,7 +163,7 @@ vec3 GetEnvironmentLight(Ray ray) {
 	vec2 uv = CartesianToSpherical(ray.dir).zy/PI-vec2(0.5,0.5);
 
 	// Add glow effect
-	int     d = 1;      // how many pixels width and height x 2 to sample near (0 => normal sampling)
+	int     d = 0;      // how many pixels width and height x 2 to sample near (0 => normal sampling)
     float   ds = 1.0 / 3.0;   // distance between each sampling distance
 
 	vec3 avg = vec3(0);
