@@ -20,5 +20,5 @@ $ mkdir build
 $ cd build
 $ cmake -S ../ -B ./
 ```
-Lastly, use Visual Studio to open `vulkan-compute.sln`, and build for Release!
+Lastly, use Visual Studio to open `vulkan-compute.sln`, and build for Release! You may have to set vulkan-compute as "Startup project".
 (Building for Debug enables Validation layers and lowers performance)
