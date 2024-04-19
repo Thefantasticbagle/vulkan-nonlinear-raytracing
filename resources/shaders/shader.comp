@@ -14,7 +14,7 @@ const float PI = radians(180);
 const bool  CULL_FACE = true;
 const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
 const int   RAY_SUBDIVISIONS = 20;
-const float RAY_STEP_RANDOMNESS = 0.025;
+const float RAY_STEP_RANDOMNESS = 0.015;
 
 const float kEpsilion = 0.001; // Rename to K_EPSILION?
 
@@ -141,41 +141,9 @@ vec3 CartesianToSpherical(vec3 cartesian) {
  * @return The environment light for the ray. 
  */
 vec3 GetEnvironmentLight(Ray ray) {
-//    vec3 sunPosition = vec3(0,1,0);
-//
-//    // Set up environment
-//    // TODO: Move these to another place.
-//    vec3 	SkyColourHorizon = vec3(1,0,1),
-//            SkyColourZenith = vec3(0.5,0.2,1),
-//            GroundColour = vec3(0.1,0.2,0.2);
-//    float   SunFocus = 10.f,
-//            SunIntensity = 0.5f;
-//    
-//    // Calculate gradients
-//    float skyGradientT = pow(smoothstep(0.0, 0.4, ray.dir.y), 0.35);
-//    float groundToSkyT = smoothstep(-0.01, 0.0, ray.dir.y);
-//    vec3 skyGradient = mix(SkyColourHorizon, SkyColourZenith, skyGradientT);
-//    float sun = pow(max(0, dot(ray.dir, sunPosition)), SunFocus) * SunIntensity;
-//
-//    // Combine ground, sky, and sun, and return the final color
-//    return mix(GroundColour, skyGradient, groundToSkyT) + sun * int(groundToSkyT>=1);
-
-	vec2 uv = CartesianToSpherical(ray.dir).zy/PI-vec2(0.5,0.5);
-
-	// Add glow effect
-	int     d = 0;      // how many pixels width and height x 2 to sample near (0 => normal sampling)
-    float   ds = 1.0 / 3.0;   // distance between each sampling distance
-
-	vec3 avg = vec3(0);
-	for (int y = -d; y <= d; y++)
-	for (int x = -d; x <= d; x++) {
-		vec3 ccol = texture(imageSampler, uv + vec2(x/ubo.screenSize.x,y/ubo.screenSize.y)*ds).rgb;
-		ccol = normalize(ccol) * pow(length(ccol), 4);
-		avg += ccol;
-	}
-	avg /= pow(2*d+1,2);
-
-	return avg;
+	vec2 uv = CartesianToSpherical(ray.dir).yz/PI-vec2(0.5,0.5) + vec2(frame.frameNumber, frame.frameNumber / 3.f) / 1800.f;
+    vec3 col = texture(imageSampler, uv).rgb; float col_m = length(col); if (col_m > 0.f) col /= col_m;
+    return col * pow(col_m, 3);
 }
 
 // --- Ray intersection functions ---
@@ -350,7 +318,7 @@ vec3 Trace(Ray ray, inout uint seed) {
 
     // If the ray was not destroyed but instead went out into space, sample enironment color
     if (ray.destroyed) return vec3(0);
-    return incomingLight + GetEnvironmentLight(ray) * rayColor * 0.3f;
+    return incomingLight + GetEnvironmentLight(ray) * rayColor;
 }
 
 // --- Program ---
@@ -372,12 +340,13 @@ void main()  {
             camRight = normalize(frame.localToWorld[0].xyz);
 
     // Fire rays
-    Ray ray;
-    ray.destroyed = false;
     vec3 totalIncomingLight = vec3(0);
 
     for ( int i = 0; i < ubo.raysPerFrag; i++ )
     {
+        Ray ray;
+        ray.destroyed = false;
+
         // Calculate ray origin and dir
         vec2 jitter = randVecCartesianNormDist(seed) * ubo.divergeStrength / ubo.screenSize.x;
         vec3 focusPointJittered = focusPoint + camRight*jitter.x + camUp*jitter.y;

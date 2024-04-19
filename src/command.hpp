@@ -89,8 +89,11 @@ void inline endSingleTimeCommands(
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(queue);
+    VkResult res = vkQueueSubmit(queue, 1, &submitInfo, VK_NULL_HANDLE);
+    if (res != VK_SUCCESS) throw std::runtime_error("ERR::VULKAN::END_SINGLE_TIME_COMMANDS::UNEXPECTED_SUBMIT_ERROR");
+    res = vkQueueWaitIdle(queue);
+//    if (res != VK_SUCCESS) 
+//        throw std::runtime_error("ERR::VULKAN::END_SINGLE_TIME_COMMANDS::UNEXPECTED_WAIT_ERROR");
 
     // Cleanup
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);

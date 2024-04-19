@@ -149,7 +149,8 @@ void inline createBuffer(
     VkPhysicalDevice        physicalDevice,
     VkDevice                device,
     VkBuffer                & buffer,
-    VkDeviceMemory          & bufferMemory
+    VkDeviceMemory          & bufferMemory,
+    bool                    enableDeviceAddressFlag = false
 ) {
     // Create buffer object
     VkBufferCreateInfo bufferInfo{};
@@ -168,6 +169,12 @@ void inline createBuffer(
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
     allocInfo.allocationSize = memRequirements.size;
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties, physicalDevice);
+
+    if (enableDeviceAddressFlag) {
+        VkMemoryAllocateFlagsInfoKHR flags_info{ VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHR };
+        flags_info.flags = VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_BIT_KHR;
+        allocInfo.pNext = &flags_info;
+    }
 
     /*
         Allocating memory for and every buffer if not good!

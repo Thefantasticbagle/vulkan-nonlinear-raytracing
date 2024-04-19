@@ -6,7 +6,9 @@ void VulkanApplication::drawFrame() {
 
     // --- Compute
     // Wait for previous compute iteration
-    vkWaitForFences(device, 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    VkResult res = vkWaitForFences(device, 1, &computeInFlightFences[currentFrame], VK_TRUE, UINT64_MAX);
+    if (res != VK_SUCCESS)
+        throw std::runtime_error("ERR::VULKAN::DRAW_FRAME::UNEXPECTED_WAIT_ERROR");
 
     // Reset fences before commiting new commands
     vkResetFences(device, 1, &computeInFlightFences[currentFrame]);
@@ -36,7 +38,7 @@ void VulkanApplication::drawFrame() {
 
     // Fetch image from swapchain
     uint32_t imageIndex;
-    VkResult res = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+    res = vkAcquireNextImageKHR(device, swapChain, UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
     if (res == VK_ERROR_OUT_OF_DATE_KHR) {
         // If the swapchain was out of date for presentation, cancel presentation and recreate it
@@ -75,7 +77,8 @@ void VulkanApplication::drawFrame() {
 
     // Submit command buffer to graphics queue!
     // (in the future there should be an array of many command buffers, not just one)
-    if (vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS)
+    auto err = vkQueueSubmit(graphicsQueue, 1, &submitInfo, inFlightFences[currentFrame]);
+    if (err != VK_SUCCESS)
         throw std::runtime_error("failed to submit draw command buffer!");
 
     // Presentation

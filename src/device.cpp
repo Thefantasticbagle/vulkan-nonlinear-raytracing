@@ -52,6 +52,14 @@ bool VulkanApplication::isDeviceSuitable(VkPhysicalDevice device) {
     vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
     bool isValid = indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
 
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{};
+    accelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    VkPhysicalDeviceFeatures2 supportedFeatures2;
+    supportedFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    supportedFeatures2.pNext = &accelFeatures;
+    vkGetPhysicalDeviceFeatures2(device, &supportedFeatures2);
+    isValid &= accelFeatures.accelerationStructure;
+
     // (Also, for now, require that a DEDICATED GPU is used)
     VkPhysicalDeviceProperties props;
     vkGetPhysicalDeviceProperties(device, &props);
@@ -143,15 +151,32 @@ void VulkanApplication::createLogicalDevice() {
     }
 
     // (Later I might want to add a feature like VK_KHR_swapchain)
-    VkPhysicalDeviceFeatures deviceFeatures{};
-    deviceFeatures.samplerAnisotropy = VK_TRUE;
+    //VkPhysicalDeviceFeatures deviceFeatures{};
+    //deviceFeatures.samplerAnisotropy = VK_TRUE;
+
+    VkPhysicalDeviceAccelerationStructureFeaturesKHR accelFeatures{};
+    accelFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR;
+    accelFeatures.accelerationStructure = VK_TRUE;
+
+    VkPhysicalDeviceBufferDeviceAddressFeatures deviceFeatures{};
+    deviceFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR;
+    deviceFeatures.bufferDeviceAddress = VK_TRUE;
+    deviceFeatures.pNext = &accelFeatures;
+
+    VkPhysicalDeviceFeatures2 deviceFeatures2{};
+    deviceFeatures2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+    deviceFeatures2.pNext = &deviceFeatures;
+    deviceFeatures2.features.samplerAnisotropy = VK_TRUE;
 
     // Create device info struct
+    // TODO: ADD VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR AND MORE TO PNEXT
+    // (Even if it works without, they should probably be here...)
+    // https://nvpro-samples.github.io/vk_raytracing_tutorial_KHR/
     VkDeviceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
     createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.pNext = &deviceFeatures2;
 
     // Enable extensions explicitly
     createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
