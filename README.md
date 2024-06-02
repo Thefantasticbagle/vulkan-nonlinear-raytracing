@@ -1,6 +1,7 @@
 # vulkan-nonlinear-raytracing
 ![Image of a black hole with a mirror in front of it and a sun behind](images/frontpagecover.png)<br>
-A real-time non-linear ray tracing engine made using mainly Vulkan Compute and C++.
+A real-time non-linear ray tracing engine made using mainly Vulkan Compute and C++.<br>
+**Note**: This README contains a lot of animations which take a long time to load.
 
 ## Features / gallery
 ### Visualizing black holes
