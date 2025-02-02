@@ -3,6 +3,7 @@
 #extension GL_EXT_ray_tracing : enable
 #extension GL_EXT_ray_query : enable
 #extension GL_GOOGLE_include_directive : enable
+#extension GL_EXT_debug_printf : enable
 
 #include "../../src/glsl_cpp_common.h"
 
@@ -13,8 +14,8 @@
 const float PI = radians(180);
 const bool  CULL_FACE = true;
 const bool  CLIP_MESHES = false; // Disable until triangle raycasting becomes more expensive
-const int   RAY_SUBDIVISIONS = 20;
-const float RAY_STEP_RANDOMNESS = 0.015;
+const int   RAY_SUBDIVISIONS = 15;
+const float RAY_STEP_RANDOMNESS = 0.025;
 
 const float kEpsilion = 0.001; // Rename to K_EPSILION?
 
@@ -59,6 +60,10 @@ layout (binding = b_image, rgba8) writeonly uniform image2D image;
 
 // Skybox texture
 layout(binding = b_skybox) uniform sampler2D imageSampler;
+
+layout(std140, binding = b_torus) readonly buffer TorusSSBOIn {
+   RTTorus torusIn [ ];
+};
 
 // --- Randomness functions ---
 
@@ -146,6 +151,194 @@ vec3 GetEnvironmentLight(Ray ray) {
     return col * pow(col_m, 3);
 }
 
+
+vec4 iTorus( in vec3 ro, in vec3 rd, in vec2 tor )
+{
+    float po = 1.0;
+    
+    float Ra2 = tor.x*tor.x;
+    float ra2 = tor.y*tor.y;
+	
+    float m = dot(ro,ro);
+    float n = dot(ro,rd);
+
+    // bounding sphere
+    {
+        float h = n*n - m + (tor.x+tor.y)*(tor.x+tor.y);
+        if( h<0.0 ) return vec4(-1.0);
+    }
+
+    // find quartic equation
+    float k = (m - ra2 - Ra2)/2.0;
+    float k3 = n;
+    float k2 = n*n + Ra2*rd.z*rd.z + k;
+    float k1 = k*n + Ra2*ro.z*rd.z;
+    float k0 = k*k + Ra2*ro.z*ro.z - Ra2*ra2;
+	
+#if 1
+    // prevent |c1| from being too close to zero
+    if( abs(k3*(k3*k3 - k2) + k1) < 0.01 )
+    {
+        po = -1.0;
+        float tmp=k1; k1=k3; k3=tmp;
+        k0 = 1.0/k0;
+        k1 = k1*k0;
+        k2 = k2*k0;
+        k3 = k3*k0;
+    }
+#endif
+
+    float c2 = 2.0*k2 - 3.0*k3*k3;
+    float c1 = k3*(k3*k3 - k2) + k1;
+    float c0 = k3*(k3*(-3.0*k3*k3 + 4.0*k2) - 8.0*k1) + 4.0*k0;
+
+    c2 /= 3.0;
+    c1 *= 2.0;
+    c0 /= 3.0;
+    
+    float Q = c2*c2 + c0;
+    float R = 3.0*c0*c2 - c2*c2*c2 - c1*c1;
+    
+    float h = R*R - Q*Q*Q;
+    float z = 0.0;
+    if( h < 0.0 )
+    {
+        // 4 intersections
+        float sQ = sqrt(Q);
+        z = 2.0*sQ*cos( acos(R/(sQ*Q)) / 3.0 );
+    }
+    else
+    {
+        // 2 intersections
+        float sQ = pow( sqrt(h) + abs(R), 1.0/3.0 );
+        z = sign(R)*abs( sQ + Q/sQ );
+    }		
+    z = c2 - z;
+	
+    float d1 = z   - 3.0*c2;
+    float d2 = z*z - 3.0*c0;
+    if( abs(d1) < 1.0e-4 )
+    {
+        if( d2 < 0.0 ) return vec4(-1.0);
+        d2 = sqrt(d2);
+    }
+    else
+    {
+        if( d1 < 0.0 ) return vec4(-1.0);
+        d1 = sqrt( d1/2.0 );
+        d2 = c1/d1;
+    }
+
+    //----------------------------------
+	
+    float result = 1e20;
+
+    h = d1*d1 - z + d2;
+    if( h > 0.0 )
+    {
+        h = sqrt(h);
+        float t1 = -d1 - h - k3; t1 = (po<0.0)?2.0/t1:t1;
+        float t2 = -d1 + h - k3; t2 = (po<0.0)?2.0/t2:t2;
+        if( t1 > 0.0 ) result=t1; 
+        if( t2 > 0.0 ) result=min(result,t2);
+    }
+
+    h = d1*d1 - z - d2;
+    if( h > 0.0 )
+    {
+        h = sqrt(h);
+        float t1 = d1 - h - k3;  t1 = (po<0.0)?2.0/t1:t1;
+        float t2 = d1 + h - k3;  t2 = (po<0.0)?2.0/t2:t2;
+        if( t1 > 0.0 ) result=min(result,t1);
+        if( t2 > 0.0 ) result=min(result,t2);
+    }
+
+    // Compute world-space position
+    vec3 world_pos = ro + result * rd;
+    return vec4(world_pos, result);
+}
+
+vec3 nTorus( in vec3 pos, vec2 tor )
+{
+	return normalize( pos*(dot(pos,pos)- tor.y*tor.y - tor.x*tor.x*vec3(1.0,1.0,-1.0)));
+}
+
+mat3 rotateEuler(vec3 angles) {
+    float cx = cos(angles.x);
+    float sx = sin(angles.x);
+    float cy = cos(angles.y);
+    float sy = sin(angles.y);
+    float cz = cos(angles.z);
+    float sz = sin(angles.z);
+
+    mat3 rx = mat3(
+        1.0, 0.0, 0.0,
+        0.0, cx, -sx,
+        0.0, sx, cx
+    );
+
+    mat3 ry = mat3(
+        cy, 0.0, sy,
+        0.0, 1.0, 0.0,
+        -sy, 0.0, cy
+    );
+
+    mat3 rz = mat3(
+        cz, -sz, 0.0,
+        sz, cz, 0.0,
+        0.0, 0.0, 1.0
+    );
+
+    return rz * ry * rx;
+}
+
+HitInfo RayTorus(Ray ray, RTTorus torus) {
+    HitInfo hitInfo = HitInfo0;
+    hitInfo.didHit = false;
+
+
+    vec3 rotEuler = torus.rotation_thickness.xyz + vec3( sin(frame.frameNumber / 50.f) / 10.f, cos(frame.frameNumber / 50.f) / 10.f, 0.f );
+    mat3 rot = rotateEuler( rotEuler ),
+         rotInv = transpose( rot );
+    mat3 scale = mat3(
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 0.5 );
+    mat3 scaleInv = transpose( scale );
+
+    vec3 ro = ray.origin,
+         rd = ray.dir;
+
+    ro = scaleInv * rotInv * (ro - torus.position_radius.xyz);
+    rd = scaleInv * rotInv * rd;
+
+    vec2    trus = vec2(torus.position_radius.w, torus.rotation_thickness.w) * 2.f;
+    vec4    result = iTorus( ro, rd, trus );
+    float   t = result.w;
+    vec3    pos = result.xyz;
+
+    if ( t > 0.0 ){
+
+		vec3 nor = nTorus( pos, trus );
+        hitInfo.didHit = true;
+        hitInfo.pos = torus.position_radius.xyz + scaleInv * rot * pos;
+        //hitInfo.dist = distance(hitInfo.pos, ray.origin);
+        hitInfo.dist = distance(pos, ro);
+        hitInfo.normal = nor;
+        //hitInfo.material = torus.material;
+
+        vec2 uv = CartesianToSpherical(hitInfo.pos).yz/PI-vec2(0.5,0.5) + vec2(frame.frameNumber, frame.frameNumber / 3.f) / 1800.f;
+        vec3 col = texture(imageSampler, uv).rgb; float col_m = length(col); if (col_m > 0.f) col /= col_m;
+        col = col * pow(col_m, 2) * 100.f * vec3(1.0,0.7,0.3) + vec3(0.5,0.2,0.1);
+        hitInfo.material = RTMaterial(vec4(col, 0.2), vec4(col,1), vec4(0,0,0,0), 0.f);
+
+
+    }
+
+    return hitInfo;
+}
+
+
 // --- Ray intersection functions ---
 /**
  * Checks for an intersection between a ray and a sphere.
@@ -155,7 +348,7 @@ vec3 GetEnvironmentLight(Ray ray) {
  *
  * @return The hit information from the (possible) intersection.
  */
-HitInfo RaySphere(Ray ray, RTSphere sphere) {	
+HitInfo RaySphere(Ray ray, RTSphere sphere) {
     HitInfo hitInfo = HitInfo0;
     vec3 offsetRayOrigin = ray.origin - sphere.center;
 
@@ -177,6 +370,8 @@ HitInfo RaySphere(Ray ray, RTSphere sphere) {
             hitInfo.dist = dist;
             hitInfo.pos = ray.origin + ray.dir * dist;
             hitInfo.normal = normalize(hitInfo.pos - sphere.center);
+            //hitInfo.material = RTMaterial(vec4(hitInfo.pos,1), vec4(0,0,0,0), vec4(0,0,0,0), 0.f);
+            hitInfo.material = sphere.material;
         }
     }
 
@@ -213,6 +408,17 @@ HitInfo CalculateRayCollision(Ray ray, float stepDist) {
     HitInfo closestHit = HitInfo0;
     closestHit.dist = -1;
 
+    // Raycast toruses
+    for (int i = 0; i < ubo.torusCount; i++) {
+        RTTorus torus = torusIn[i];
+
+        HitInfo hitInfo = RayTorus(ray, torus);
+        if (hitInfo.didHit && hitInfo.dist <= stepDist && ( closestHit.dist < 0 || hitInfo.dist < closestHit.dist ) )
+        {
+            closestHit = hitInfo;
+        }
+    }
+
     // Raycast spheres
     for (int i = 0; i < ubo.spheresCount; i++) {
         RTSphere sphere = spheresIn[i];
@@ -221,7 +427,6 @@ HitInfo CalculateRayCollision(Ray ray, float stepDist) {
         if (hitInfo.didHit && hitInfo.dist <= stepDist && ( closestHit.dist < 0 || hitInfo.dist < closestHit.dist ) )
         {
             closestHit = hitInfo;
-            closestHit.material = sphere.material;
         }
     }
 
@@ -261,6 +466,8 @@ void SampleLineSegment(inout Ray ray, inout float stepDist, inout vec3 incomingL
             ray.origin += ray.dir * stepDist;
             stepDist -= stepDist;
         }
+
+        if ( ubo.blackholesCount <= 0 ) return;
     }
 }
 
@@ -299,6 +506,8 @@ float BendLight(inout Ray ray, inout uint seed) {
         // FOR NOW; ONLY WORKS WITH ONE BLACK HOLE
         return stepDist;
     }
+
+    return 1e9;
 }
 
 vec3 Trace(Ray ray, inout uint seed) {
@@ -324,6 +533,8 @@ vec3 Trace(Ray ray, inout uint seed) {
 // --- Program ---
 layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
 void main()  {
+    //debugPrintfEXT("AAA\n\n\n");
+
     // Create seed for RNG
     vec2 uv = vec2( gl_GlobalInvocationID.x / ubo.screenSize.x, 1 - gl_GlobalInvocationID.y / ubo.screenSize.y );
     uint i = uint( gl_GlobalInvocationID.y * ubo.screenSize.x + gl_GlobalInvocationID.x );

@@ -30,7 +30,8 @@ START_BINDING( ComputeBindings )
 	b_spheres		= 1,
 	b_blackholes	= 2,
 	b_image			= 3,
-	b_skybox		= 4
+	b_skybox		= 4,
+	b_torus			= 5
 END_BINDING();
 
 // --- Structs
@@ -61,7 +62,8 @@ struct RTParams {
 
     // Other
     uint    spheresCount,
-            blackholesCount;
+            blackholesCount,
+			torusCount;
 };
 
 /**
@@ -89,6 +91,15 @@ struct RTSphere {
 struct RTBlackhole {
 	a16 float	radius;
 	a16 vec3	center;
+};
+
+/**
+ *	Struct for storing black hole information.
+ */
+struct RTTorus {
+	a16 vec4		position_radius;
+	a16 vec4		rotation_thickness;
+	a16 RTMaterial	material;
 };
 
 #endif

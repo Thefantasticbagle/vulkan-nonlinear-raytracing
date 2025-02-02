@@ -76,7 +76,8 @@ void VulkanApplication::recordComputeCommandBuffer(VkCommandBuffer commandBuffer
 
     // Dispatch and commit
     //vkCmdDispatch(commandBuffer, static_cast<uint32_t>(swapChainExtent.width), static_cast<uint32_t>(swapChainExtent.height), 1); // TODO: ADD PARTICLE_COUNT VARIABLE
-    vkCmdDispatch(commandBuffer, WIDTH / 32, HEIGHT / 32, 1); // TODO: ADD PARTICLE_COUNT VARIABLE
+    //vkCmdDispatch(commandBuffer, WIDTH / 32, HEIGHT / 32, 1); // TODO: ADD PARTICLE_COUNT VARIABLE
+    vkCmdDispatchIndirect(commandBuffer, dispatchBuffer, 0); // TODO: REMOVE THIS AND DISPATCH BUFFER
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         throw std::runtime_error("ERR::VULKAN::RECORD_COMPUTE_COMMAND_BUFFER::COMMIT_FAILED");
 }

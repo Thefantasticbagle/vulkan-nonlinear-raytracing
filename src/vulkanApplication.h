@@ -126,45 +126,152 @@ public:
 
         // Set up RTSpheres
         std::vector<RTSphere> spheres {
-            RTSphere {
-                1.f,
-                glm::vec3(0,0,14),
-                RTMaterial {
-                    glm::vec4(1,1,1,1),
-                    glm::vec4(1,1,1,0),
-                    glm::vec4(1,1,1,0.95f),
-                    1.f
-                }
-            },
-            RTSphere {
-                10.f,
-                glm::vec3(0,5,-16),
-                RTMaterial {
-                    glm::vec4(1,0.3,0,1),
-                    glm::vec4(1,0.3,0,0.5f),
-                    glm::vec4(1,1,1,0.0f),
-                    0.5f
-                }
-            },
-            RTSphere {
-                100.f,
-                glm::vec3(0,-100,0),
-                RTMaterial {
-                    glm::vec4(1,1,1,1),
-                    glm::vec4(0,1,0,0.f),
-                    glm::vec4(0,1,0,0.f),
-                    0.f
-                }
-            }
+            //RTSphere {
+            //    1.f,
+            //    glm::vec3(0,0,14),
+            //    RTMaterial {
+            //        glm::vec4(1,1,1,1),
+            //        glm::vec4(1,1,1,0),
+            //        glm::vec4(1,1,1,0.95f),
+            //        1.f
+            //    }
+            //},
+            //RTSphere {
+            //    10.f,
+            //    glm::vec3(0,5,-16),
+            //    RTMaterial {
+            //        glm::vec4(1,0.3,0,1),
+            //        glm::vec4(1,0.3,0,0.5f),
+            //        glm::vec4(1,1,1,0.0f),
+            //        0.5f
+            //    }
+            //},
+            //RTSphere {
+            //    100.f,
+            //    glm::vec3(0,-100,0),
+            //    RTMaterial {
+            //        glm::vec4(1,1,1,1),
+            //        glm::vec4(0,1,0,0.f),
+            //        glm::vec4(0,1,0,0.f),
+            //        0.f
+            //    }
+            //}
         };
 
         // Set up RTBlackholes
         std::vector<RTBlackhole> blackholes {
             RTBlackhole {
-                1.f,
+                0.5f,
                 glm::vec3(0,1,6),
             }
         };
+
+        std::vector<RTTorus> torus {
+            RTTorus {
+                glm::vec4(0.f, 1.f, 6.f, 3.5f / 1.25f),
+                glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.05f / 1.25f),
+                    RTMaterial{
+                        glm::vec4(1.f,0.7f,0.3f,0.1f),
+                        glm::vec4(1.f,0.5f,0.1f,0.8f),
+                        glm::vec4(1.f,0.7f,0.3f,0.0f),
+                        0.5f
+                }
+            },
+            RTTorus {
+                glm::vec4(0.f, 1.f, 6.f, 3.4f / 1.25f),
+                glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.1f / 1.25f),
+                    RTMaterial{
+                        glm::vec4(1.f,0.4f,0.3f,0.1f),
+                        glm::vec4(1.f,0.5f,0.1f,0.8f),
+                        glm::vec4(1.f,0.7f,0.3f,0.0f),
+                        0.5f
+                }
+            },
+            RTTorus {
+                glm::vec4(0.f, 1.f, 6.f, 3.1f / 1.25f),
+                glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.1f / 1.25f),
+                    RTMaterial{
+                        glm::vec4(1.f,0.4f,0.3f,0.1f),
+                        glm::vec4(1.0f,0.7f,1.0f,0.8f),
+                        glm::vec4(1.f,0.7f,0.3f,0.0f),
+                        0.5f
+                }
+            },
+            RTTorus {
+                glm::vec4(0.f, 1.f, 6.f, 2.7f / 1.25f),
+                glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.15f / 1.25f),
+                    RTMaterial{
+                        glm::vec4(1.f,0.4f,0.3f,0.1f),
+                        glm::vec4(1.0f,0.7f,1.0f,2.f),
+                        glm::vec4(1.f,0.7f,0.3f,0.0f),
+                        0.5f
+                }
+            },
+
+
+            //RTTorus {
+            //    glm::vec4(0.f, 1.f, 6.f, 2.3f / 1.25f),
+            //    glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.2f / 1.25f),
+            //        RTMaterial{
+            //            glm::vec4(1.f,0.4f,0.3f,0.1f),
+            //            glm::vec4(1.f,0.5f,0.1f,1.f),
+            //            glm::vec4(1.f,0.7f,0.3f,0.0f),
+            //            0.5f
+            //    }
+            //},
+            //RTTorus {
+            //    glm::vec4(0.f, 1.f, 6.f, 2.0f / 1.25f),
+            //    glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.2f / 1.25f),
+            //        RTMaterial{
+            //            glm::vec4(1.f,0.4f,0.3f,0.1f),
+            //            glm::vec4(1.0f,0.7f,1.0f,2.f),
+            //            glm::vec4(1.f,0.7f,0.3f,0.0f),
+            //            0.5f
+            //    }
+            //},
+            //RTTorus {
+            //    glm::vec4(0.f, 1.f, 6.f, 1.8f / 1.25f),
+            //    glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.25f / 1.25f),
+            //        RTMaterial{
+            //            glm::vec4(1.f,0.4f,0.3f,0.1f),
+            //            glm::vec4(1.0f,0.7f,1.0f,2.5f),
+            //            glm::vec4(1.f,0.7f,0.3f,0.0f),
+            //            0.5f
+            //    }
+            //},
+            //RTTorus {
+            //    glm::vec4(0.f, 1.f, 6.f, 0.5),
+            //    glm::vec4(3.14f / 2.f, 0.f, 0.f, 0.05),
+            //        RTMaterial{
+            //            glm::vec4(1.f,0.4f,0.3f,0.1f),
+            //            glm::vec4(1.0f,0.7f,1.0f,10.f),
+            //            glm::vec4(1.f,0.7f,0.3f,0.0f),
+            //            0.5f
+            //    }
+            //},
+        };
+
+        // Make a buffer for holding dispatch size
+        struct DispatchIndirectCommand {
+            uint32_t x;
+            uint32_t y;
+            uint32_t z;
+        } dispatchCmd = { WIDTH / 32, HEIGHT / 32, 1 }; // Example workgroup counts
+
+        VkDeviceSize bufferSize = sizeof(DispatchIndirectCommand);
+        dispatchBuffer = createBuffer(
+            physicalDevice, device,
+            bufferSize,
+            VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            dispatchBufferMemory
+        );
+
+        // Upload the dispatch command to the buffer
+        void* data;
+        vkMapMemory(device, dispatchBufferMemory, 0, bufferSize, 0, &data);
+        memcpy(data, &dispatchCmd, sizeof(dispatchCmd));
+        vkUnmapMemory(device, dispatchBufferMemory);
 
         // Set up RTParams
         RTParams ubo{};
@@ -172,13 +279,14 @@ public:
         ubo.fov = camera.fov;
         ubo.focusDistance = camera.focusDistance;
         
-        ubo.maxBounces = 3;
+        ubo.maxBounces = 1;
         ubo.raysPerFrag = 12;
         ubo.divergeStrength = 0.025f;
         ubo.blackholePower = 1.f;
         
         ubo.spheresCount = spheres.size();
         ubo.blackholesCount = blackholes.size();
+        ubo.torusCount = torus.size();
 
         // Create buffers and layout
         computeBundle = BufferBuilder(physicalDevice, device, commandPool, computeQueue, &deletionQueue)
@@ -187,6 +295,7 @@ public:
             .SSBO(b_blackholes, VK_SHADER_STAGE_COMPUTE_BIT, blackholes)
             .genericImage(b_image, VK_SHADER_STAGE_COMPUTE_BIT, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, true, true, nullptr, nullptr, swapChainExtent.width, swapChainExtent.height)
             .sampler(b_skybox, VK_SHADER_STAGE_COMPUTE_BIT, "../resources/textures/texture.jpg")
+            .SSBO(b_torus, VK_SHADER_STAGE_COMPUTE_BIT, torus)
             .build();
 
         graphicsBundle = BufferBuilder(physicalDevice, device, commandPool, graphicsQueue, &deletionQueue)
@@ -318,6 +427,8 @@ private:
     std::vector<VkCommandBuffer>    computeCommandBuffers;
     void*                           computePushConstantReference = nullptr;
     uint32_t                        computePushConstantSize = 0;
+    VkBuffer                        dispatchBuffer;
+    VkDeviceMemory                  dispatchBufferMemory;
 
     // Synchronization
     std::vector<VkSemaphore>    imageAvailableSemaphores;
